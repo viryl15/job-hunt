@@ -1,0 +1,16 @@
+{
+  "name": "Job Hunt PWA",
+  "short_name": "JobHunt",
+  "description": "Privacy-focused job hunting application for EU developers",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "orientation": "portrait-primary",
+  "icons": [],
+  "categories": ["productivity", "business"],
+  "lang": "en",
+  "dir": "ltr",
+  "scope": "/",
+  "prefer_related_applications": false
+}
