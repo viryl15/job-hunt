@@ -4,7 +4,7 @@ import { JobBoardFactory, SearchCriteria, ApplicationData } from '@/lib/job-boar
 
 export async function POST(request: NextRequest) {
   try {
-    const { configId } = await request.json()
+    const { configId, useRealAutomation = false } = await request.json()
     
     if (!configId) {
       return NextResponse.json(
@@ -32,8 +32,9 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`Starting automated application for ${config.boardName}...`)
+    console.log(`Real automation mode: ${useRealAutomation ? 'ENABLED' : 'DEMO MODE'}`)
     
-    const automator = JobBoardFactory.createAutomator(config)
+    const automator = await JobBoardFactory.createAutomator(config, useRealAutomation)
     
     // Login to job board
     const loginSuccess = await automator.login()

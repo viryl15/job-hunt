@@ -45,3 +45,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local files
+/apps/web/automation-logs/*
+/apps/web/automation-screenshots/*
+/html

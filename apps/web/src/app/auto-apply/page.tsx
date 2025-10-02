@@ -14,6 +14,7 @@ export default function AutoApplyPage() {
   const [editingConfig, setEditingConfig] = useState<JobBoardConfig | undefined>()
   const [loading, setLoading] = useState(true)
   const [runningJobs, setRunningJobs] = useState<Set<string>>(new Set())
+  const [useRealAutomation, setUseRealAutomation] = useState(false)
 
   // Mock user ID - in a real app this would come from authentication
   const userId = 'user_123'
@@ -100,7 +101,10 @@ export default function AutoApplyPage() {
       const response = await fetch('/api/auto-apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ configId: config.id })
+        body: JSON.stringify({ 
+          configId: config.id,
+          useRealAutomation: useRealAutomation 
+        })
       })
 
       const result = await response.json()
@@ -156,11 +160,49 @@ export default function AutoApplyPage() {
             Manage job board configurations and run automated applications
           </p>
         </div>
-        <Button onClick={() => setShowConfigForm(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Job Board
-        </Button>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="realAutomation"
+              checked={useRealAutomation}
+              onChange={(e) => setUseRealAutomation(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <label htmlFor="realAutomation" className="text-sm font-medium">
+              {useRealAutomation ? (
+                <span className="text-red-600">🔴 REAL MODE (Apply to actual jobs!)</span>
+              ) : (
+                <span className="text-green-600">🟢 DEMO MODE (Safe testing)</span>
+              )}
+            </label>
+          </div>
+          <Button onClick={() => setShowConfigForm(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Job Board
+          </Button>
+        </div>
       </div>
+
+      {useRealAutomation && (
+        <Card className="mb-6 border-red-200 bg-red-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="text-red-600 text-2xl">⚠️</div>
+              <div>
+                <h3 className="font-bold text-red-800">REAL AUTOMATION MODE ENABLED</h3>
+                <p className="text-red-700">
+                  This will submit actual job applications to HelloWork using your account. 
+                  Make sure your profile, CV, and cover letter template are ready before proceeding.
+                </p>
+                <p className="text-sm text-red-600 mt-1">
+                  Applications cannot be undone. Use demo mode for testing.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {loading ? (
         <div className="text-center py-8">Loading configurations...</div>

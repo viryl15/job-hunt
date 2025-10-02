@@ -251,9 +251,14 @@ Cordialement,
 
 // Job board factory
 export class JobBoardFactory {
-  static createAutomator(config: JobBoardConfig): JobBoardAutomator {
+  static async createAutomator(config: JobBoardConfig, useReal: boolean = false): Promise<JobBoardAutomator> {
     switch (config.boardName.toLowerCase()) {
       case 'hellowork':
+        if (useReal) {
+          // Import real automation dynamically to avoid browser issues
+          const { createRealHelloWorkAutomator } = await import('./real-hellowork-automation')
+          return createRealHelloWorkAutomator(config)
+        }
         return new HelloWorkAutomator(config)
       default:
         throw new Error(`Unsupported job board: ${config.boardName}`)

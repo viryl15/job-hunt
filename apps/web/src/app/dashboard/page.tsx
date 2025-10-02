@@ -163,6 +163,18 @@ export default function Dashboard() {
                   Auto Apply
                 </Button>
               </Link>
+              <Link href="/test-hellowork">
+                <Button variant="outline" size="sm">
+                  <Briefcase className="h-4 w-4 mr-2" />
+                  Test Login
+                </Button>
+              </Link>
+              <Link href="/automation-logs">
+                <Button variant="outline" size="sm">
+                  <Settings className="h-4 w-4 mr-2" />
+                  View Logs
+                </Button>
+              </Link>
               <Button variant="outline" size="sm">
                 <Users className="h-4 w-4 mr-2" />
                 Dev Mode
