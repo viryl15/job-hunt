@@ -15,8 +15,10 @@ import {
   ExternalLink,
   Building2,
   Calendar,
-  Users
+  Users,
+  Settings
 } from 'lucide-react'
+import { JobSourceSelector } from '@/components/JobSourceSelector'
 
 interface Job {
   id: string
@@ -54,6 +56,8 @@ export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalJobs, setTotalJobs] = useState(0)
+  const [isScrapingJobs, setIsScrapingJobs] = useState(false)
+  const [showSourceSelector, setShowSourceSelector] = useState(false)
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -81,6 +85,37 @@ export default function Dashboard() {
   useEffect(() => {
     fetchJobs()
   }, [fetchJobs])
+
+  const scrapeRealJobs = async (options: {
+    sources: string[]
+    location: string
+    remoteOnly: boolean
+    limit: number
+  }) => {
+    setIsScrapingJobs(true)
+    try {
+      const response = await fetch('/api/jobs/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(options)
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        alert(`✅ Successfully scraped ${result.data.newJobs} new real jobs from ${options.sources.join(', ')}!`)
+        // Refresh the job list
+        fetchJobs()
+      } else {
+        alert(`❌ Scraping failed: ${result.details || result.error}`)
+      }
+    } catch (error) {
+      console.error('Scraping error:', error)
+      alert('❌ Failed to scrape jobs. Check console for details.')
+    } finally {
+      setIsScrapingJobs(false)
+    }
+  }
 
   const formatSalary = (min?: number, max?: number) => {
     if (!min && !max) return 'Salary not specified'
@@ -185,7 +220,7 @@ export default function Dashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col sm:flex-row gap-4 mb-4">
               <div className="flex-1">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -202,8 +237,30 @@ export default function Dashboard() {
                 Filters
               </Button>
             </div>
+            <div className="flex gap-2">
+              <Button 
+                onClick={() => setShowSourceSelector(!showSourceSelector)}
+                variant={showSourceSelector ? "default" : "outline"}
+                className="flex-1 sm:flex-none"
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                {showSourceSelector ? 'Hide' : 'Configure'} Job Sources
+              </Button>
+              <Button variant="outline" size="sm">
+                Clear Test Data
+              </Button>
+            </div>
           </CardContent>
         </Card>
+
+        {/* Job Source Selector */}
+        {showSourceSelector && (
+          <div className="mb-6">
+            <JobSourceSelector 
+              onScrape={scrapeRealJobs}
+            />
+          </div>
+        )}
 
         {/* Jobs List */}
         <div className="space-y-4">

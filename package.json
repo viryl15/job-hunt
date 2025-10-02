@@ -3,19 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "apps/*"
   ],
   "scripts": {
     "dev": "cd apps/web && npm run dev",
     "build": "cd apps/web && npm run build",
     "start": "cd apps/web && npm run start",
     "lint": "cd apps/web && npm run lint",
-    "type-check": "cd apps/web && npm run type-check",
-    "db:generate": "npx prisma generate",
-    "db:push": "npx prisma db push",
-    "db:migrate": "npx prisma migrate dev",
-    "db:studio": "npx prisma studio"
+    "type-check": "cd apps/web && npm run type-check"
   },
   "devDependencies": {
     "typescript": "^5",

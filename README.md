@@ -1,33 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Job Hunt PWA
 
-## Getting Started
+A privacy-first, automated job application system for developers.
 
-First, run the development server:
+## 🎯 Vision
+
+Automate the tedious parts of job hunting while keeping you in control:
+
+- **Smart Job Discovery**: Auto-scrape and score jobs from multiple sources
+- **Automated Applications**: Send personalized applications via Gmail API  
+- **Intelligent Pipeline**: Track applications from leads to interviews
+- **Privacy-Conscious**: Self-hosted, you control your data
+- **Developer-Focused**: Built for remote work and tech skills
+
+## 🚀 Quick Start
 
 ```bash
+# Install dependencies
+npm install
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+# Visit http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 📁 Architecture
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+apps/web/                 # Next.js 14 PWA
+├── src/app/             # App Router pages
+├── src/components/      # React components  
+├── src/lib/            # Database & utilities
+└── public/             # Static assets
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🛠️ Tech Stack
 
-## Learn More
+- **Frontend**: Next.js 14, TypeScript, Tailwind CSS
+- **Database**: MySQL with direct mysql2 queries
+- **UI Components**: shadcn/ui
+- **Icons**: Lucide React
+- **PWA**: Service worker, manifest.json
 
-To learn more about Next.js, take a look at the following resources:
+## 📊 Current Status
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+✅ **Foundation Complete**
+- Landing page and dashboard UI
+- Job ingestion with scoring algorithm  
+- MySQL database with optimized schema
+- Search and filtering functionality
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+🔄 **In Progress**
+- Gmail API integration for automated applications
+- Application workflow and tracking
+- Email templates and follow-up system
 
 ## Deploy on Vercel
 
