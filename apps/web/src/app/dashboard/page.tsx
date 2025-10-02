@@ -16,8 +16,11 @@ import {
   Building2,
   Calendar,
   Users,
-  Settings
+  Settings,
+  Zap,
+  Home
 } from 'lucide-react'
+import Link from 'next/link'
 import { JobSourceSelector } from '@/components/JobSourceSelector'
 
 interface Job {
@@ -154,6 +157,12 @@ export default function Dashboard() {
               <h1 className="text-2xl font-bold text-gray-900">Job Hunt</h1>
             </div>
             <div className="flex items-center space-x-4">
+              <Link href="/auto-apply">
+                <Button variant="outline" size="sm">
+                  <Zap className="h-4 w-4 mr-2" />
+                  Auto Apply
+                </Button>
+              </Link>
               <Button variant="outline" size="sm">
                 <Users className="h-4 w-4 mr-2" />
                 Dev Mode

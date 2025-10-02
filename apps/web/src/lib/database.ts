@@ -89,7 +89,7 @@ export const db = {
     order?: 'ASC' | 'DESC'
   } = {}) {
     let sql = 'SELECT * FROM job WHERE hidden = 0'
-    const params: any[] = []
+    const params: (string | number)[] = []
 
     if (options.source) {
       sql += ' AND source = ?'
@@ -128,7 +128,157 @@ export const db = {
     }
 
     return await query(sql, params)
+  },
+
+  // Job board configuration operations
+  async createJobBoardConfig(config: Omit<JobBoardConfig, 'id' | 'createdAt' | 'updatedAt'>) {
+    const id = generateId()
+    await query(`
+      INSERT INTO job_board_config (
+        id, userId, boardName, boardUrl, credentials, preferences, 
+        applicationSettings, isActive, createdAt, updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    `, [
+      id,
+      config.userId,
+      config.boardName,
+      config.boardUrl,
+      JSON.stringify(config.credentials),
+      JSON.stringify(config.preferences),
+      JSON.stringify(config.applicationSettings),
+      config.isActive ? 1 : 0
+    ])
+    return id
+  },
+
+  async getJobBoardConfigs(userId: string): Promise<JobBoardConfig[]> {
+    const configs = await query(`
+      SELECT * FROM job_board_config WHERE userId = ? ORDER BY createdAt DESC
+    `, [userId])
+    
+    return configs.map((config: any) => ({
+      ...config,
+      credentials: JSON.parse(config.credentials),
+      preferences: JSON.parse(config.preferences),
+      applicationSettings: JSON.parse(config.applicationSettings),
+      isActive: Boolean(config.isActive)
+    }))
+  },
+
+  async updateJobBoardConfig(id: string, updates: Partial<JobBoardConfig>) {
+    const setClause = []
+    const params: (string | number)[] = []
+    
+    if (updates.credentials) {
+      setClause.push('credentials = ?')
+      params.push(JSON.stringify(updates.credentials))
+    }
+    if (updates.preferences) {
+      setClause.push('preferences = ?')
+      params.push(JSON.stringify(updates.preferences))
+    }
+    if (updates.applicationSettings) {
+      setClause.push('applicationSettings = ?')
+      params.push(JSON.stringify(updates.applicationSettings))
+    }
+    if (updates.isActive !== undefined) {
+      setClause.push('isActive = ?')
+      params.push(updates.isActive ? 1 : 0)
+    }
+    
+    setClause.push('updatedAt = NOW()')
+    params.push(id)
+    
+    await query(`
+      UPDATE job_board_config SET ${setClause.join(', ')} WHERE id = ?
+    `, params)
+  },
+
+  // Application logging
+  async logApplication(data: Omit<ApplicationLog, 'id' | 'createdAt'>) {
+    const id = generateId()
+    await query(`
+      INSERT INTO application_log (
+        id, jobId, jobBoardConfigId, status, appliedAt, response, 
+        followUpRequired, followUpDate, notes, createdAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+    `, [
+      id,
+      data.jobId,
+      data.jobBoardConfigId,
+      data.status,
+      data.appliedAt || null,
+      data.response || null,
+      data.followUpRequired ? 1 : 0,
+      data.followUpDate || null,
+      data.notes || null
+    ])
+    return id
+  },
+
+  async getApplicationLogs(jobBoardConfigId?: string): Promise<ApplicationLog[]> {
+    let sql = 'SELECT * FROM application_log'
+    const params: string[] = []
+    
+    if (jobBoardConfigId) {
+      sql += ' WHERE jobBoardConfigId = ?'
+      params.push(jobBoardConfigId)
+    }
+    
+    sql += ' ORDER BY createdAt DESC'
+    
+    const logs = await query(sql, params)
+    return logs.map((log: any) => ({
+      ...log,
+      followUpRequired: Boolean(log.followUpRequired)
+    }))
   }
+}
+
+// Job board configuration for automated applications
+export interface JobBoardConfig {
+  id: string
+  userId: string
+  boardName: string
+  boardUrl: string
+  credentials: {
+    username?: string
+    email?: string
+    password?: string // encrypted
+    apiKey?: string
+  }
+  preferences: {
+    skills: string[]
+    locations: string[]
+    salaryMin?: number
+    salaryMax?: number
+    jobTypes: string[] // full-time, part-time, contract, etc.
+    experienceLevel: string
+    remotePreference: 'remote' | 'hybrid' | 'onsite' | 'any'
+  }
+  applicationSettings: {
+    autoApply: boolean
+    maxApplicationsPerDay: number
+    coverLetterTemplate?: string
+    resumeUrl?: string
+    customMessage?: string
+  }
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface ApplicationLog {
+  id: string
+  jobId: string
+  jobBoardConfigId: string
+  status: 'pending' | 'applied' | 'failed' | 'rejected' | 'interview' | 'offer'
+  appliedAt?: Date
+  response?: string
+  followUpRequired?: boolean
+  followUpDate?: Date
+  notes?: string
+  createdAt: Date
 }
 
 // Simple ID generator
