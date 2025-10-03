@@ -240,7 +240,7 @@ Je vous écris pour exprimer mon intérêt pour le poste de {{JOB_TITLE}} au sei
 
 Avec {{USER_EXPERIENCE}} d'expérience dans le développement logiciel et une expertise en {{SKILLS}}, je suis convaincu de pouvoir contribuer efficacement à vos projets.
 
-Mes compétences techniques et ma passion pour l'innovation font de moi un candidat idéal pour rejoindre votre équipe à {{LOCATION}}.
+Mes compétences techniques et ma passion pour l'innovation font de moi un candidat idéal pour rejoindre votre équipe.
 
 Je serais ravi de discuter de ma candidature lors d'un entretien.
 

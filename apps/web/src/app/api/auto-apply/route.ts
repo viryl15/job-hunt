@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/database'
-import { JobBoardFactory, SearchCriteria, ApplicationData } from '@/lib/job-board-automation'
+import { JobBoardFactory, SearchCriteria, ApplicationData, ApplicationTemplateEngine } from '@/lib/job-board-automation'
 
 export async function POST(request: NextRequest) {
   try {
@@ -60,9 +60,20 @@ export async function POST(request: NextRequest) {
 
     for (const job of jobs.slice(0, maxApplications)) {
       try {
+        // Create user profile for template generation
+        const userProfile = {
+          name: config.credentials.username || 'Candidat',
+          experience: config.preferences.experienceLevel || '5 ans',
+          skills: config.preferences.skills || []
+        }
+
+        // Generate personalized cover letter (location excluded by design)
+        const template = config.applicationSettings.coverLetterTemplate || ApplicationTemplateEngine.getDefaultCoverLetterTemplate()
+        const personalizedCoverLetter = ApplicationTemplateEngine.generateCoverLetter(template, job, userProfile)
+
         // Generate personalized application
         const applicationData: ApplicationData = {
-          coverLetter: config.applicationSettings.coverLetterTemplate || '',
+          coverLetter: personalizedCoverLetter,
           customMessage: config.applicationSettings.customMessage,
           answers: {} // Additional form answers if needed
         }

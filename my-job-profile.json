@@ -1,0 +1,93 @@
+{
+  "id": "profile_1759490083672",
+  "userId": "user_1",
+  "personalInfo": {
+    "firstName": "Jean",
+    "lastName": "Dupont",
+    "email": "jean.dupont@example.com",
+    "city": "Paris",
+    "country": "France",
+    "phone": "+33 6 12 34 56 78"
+  },
+  "professional": {
+    "currentTitle": "Développeur Full Stack",
+    "experience": "3 ans",
+    "skills": [
+      "JavaScript",
+      "TypeScript",
+      "React",
+      "Vue.js",
+      "Node.js",
+      "Python",
+      "PostgreSQL",
+      "MongoDB",
+      "AWS",
+      "Docker"
+    ],
+    "languages": [
+      {
+        "language": "Français",
+        "level": "natif"
+      },
+      {
+        "language": "Anglais",
+        "level": "avancé"
+      },
+      {
+        "language": "Espagnol",
+        "level": "intermédiaire"
+      }
+    ],
+    "education": [
+      {
+        "degree": "Master en Informatique",
+        "institution": "Université Paris Diderot",
+        "year": 2021,
+        "field": "Développement logiciel"
+      }
+    ],
+    "certifications": []
+  },
+  "preferences": {
+    "desiredTitles": [
+      "Développeur Full Stack",
+      "Développeur Frontend",
+      "Développeur Backend",
+      "Lead Developer"
+    ],
+    "preferredLocations": [
+      "Paris",
+      "Lyon",
+      "Remote"
+    ],
+    "salaryRange": {
+      "min": 45000,
+      "max": 65000,
+      "currency": "EUR"
+    },
+    "jobTypes": [
+      "CDI",
+      "FREELANCE"
+    ],
+    "workArrangement": "flexible",
+    "willingToRelocate": false
+  },
+  "documents": {
+    "coverLetterTemplate": "Madame, Monsieur,\n\nJe vous écris pour exprimer mon intérêt pour le poste de {{JOB_TITLE}} au sein de {{COMPANY_NAME}}.\n\nAvec {{USER_EXPERIENCE}} d'expérience dans le développement logiciel et une expertise en {{SKILLS}}, je suis convaincu de pouvoir contribuer efficacement à vos projets.\n\nMes compétences techniques et ma passion pour l'innovation font de moi un candidat idéal pour rejoindre votre équipe.\n\nJe serais ravi de discuter de ma candidature lors d'un entretien.\n\nCordialement,\n{{USER_NAME}}",
+    "resumeUrl": "https://example.com/my-resume.pdf",
+    "portfolioUrl": "https://example.com/portfolio",
+    "linkedinUrl": "https://linkedin.com/in/jean-dupont",
+    "githubUrl": "https://github.com/jeandupont"
+  },
+  "automation": {
+    "autoApplyEnabled": true,
+    "maxApplicationsPerDay": 15,
+    "skipCompanies": [
+      "Company I dont like",
+      "Previous Bad Experience Corp"
+    ],
+    "customMotivationMessage": "Je suis particulièrement motivé par les défis techniques et l'innovation dans le développement web."
+  },
+  "createdAt": "2025-10-03T11:14:43.672Z",
+  "updatedAt": "2025-10-03T11:14:43.672Z"
+}

@@ -35,7 +35,18 @@ export async function POST(request: NextRequest) {
         remotePreference: 'any'
       },
       applicationSettings: {
-        coverLetterTemplate: 'Test cover letter',
+        coverLetterTemplate: `Madame, Monsieur,
+
+Je vous écris pour exprimer mon intérêt pour le poste de {{JOB_TITLE}} au sein de {{COMPANY_NAME}}.
+
+Avec {{USER_EXPERIENCE}} d'expérience dans le développement logiciel et une expertise en {{SKILLS}}, je suis convaincu de pouvoir contribuer efficacement à vos projets.
+
+Mes compétences techniques et ma passion pour l'innovation font de moi un candidat idéal pour rejoindre votre équipe.
+
+Je serais ravi de discuter de ma candidature lors d'un entretien.
+
+Cordialement,
+{{USER_NAME}}`,
         maxApplicationsPerDay: 5,
         resumeUrl: '',
         customMessage: 'Test message'

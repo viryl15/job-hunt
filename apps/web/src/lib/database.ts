@@ -165,6 +165,63 @@ export const db = {
     }))
   },
 
+  async getJobBoardConfig(id: string): Promise<JobBoardConfig | null> {
+    const configs = await query(`
+      SELECT * FROM job_board_config WHERE id = ? LIMIT 1
+    `, [id])
+    
+    if (configs.length === 0) return null
+    
+    const config = configs[0] as any
+    return {
+      ...config,
+      credentials: JSON.parse(config.credentials),
+      preferences: JSON.parse(config.preferences),
+      applicationSettings: JSON.parse(config.applicationSettings),
+      isActive: Boolean(config.isActive)
+    }
+  },
+
+  async saveJobBoardConfig(config: JobBoardConfig): Promise<void> {
+    // Check if config exists
+    const existing = await db.getJobBoardConfig(config.id)
+    
+    if (existing) {
+      // Update existing config
+      await query(`
+        UPDATE job_board_config SET 
+          boardName = ?, boardUrl = ?, credentials = ?, preferences = ?, 
+          applicationSettings = ?, isActive = ?, updatedAt = NOW()
+        WHERE id = ?
+      `, [
+        config.boardName,
+        config.boardUrl,
+        JSON.stringify(config.credentials),
+        JSON.stringify(config.preferences),
+        JSON.stringify(config.applicationSettings),
+        config.isActive,
+        config.id
+      ])
+    } else {
+      // Insert new config
+      await query(`
+        INSERT INTO job_board_config (
+          id, userId, boardName, boardUrl, credentials, preferences, 
+          applicationSettings, isActive, createdAt, updatedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+      `, [
+        config.id,
+        config.userId,
+        config.boardName,
+        config.boardUrl,
+        JSON.stringify(config.credentials),
+        JSON.stringify(config.preferences),
+        JSON.stringify(config.applicationSettings),
+        config.isActive
+      ])
+    }
+  },
+
   async updateJobBoardConfig(id: string, updates: Partial<JobBoardConfig>) {
     const setClause = []
     const params: (string | number)[] = []
