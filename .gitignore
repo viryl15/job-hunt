@@ -49,4 +49,6 @@ next-env.d.ts
 # local files
 /apps/web/automation-logs/*
 /apps/web/automation-screenshots/*
+/automation-logs/*
+/automation-screenshots/*
 /html

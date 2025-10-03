@@ -25,7 +25,11 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
   constructor(config: JobBoardConfig) {
     super(config)
     this.logger = new AutomationLogger(config.id)
+    
+    // Screenshot directory relative to current working directory (apps/web when running from there)
     this.screenshotDir = path.join(process.cwd(), 'automation-screenshots')
+    
+    console.log('Screenshot directory:', this.screenshotDir) // Debug log
     
     // Create screenshots directory
     if (!fs.existsSync(this.screenshotDir)) {
@@ -734,16 +738,18 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
         '[aria-label*="verification" i]',
         '[aria-label*="captcha" i]',
         
-        // HelloWork specific bot detection text
-        'div:contains("Nous vérifions que vous n\'êtes pas un")',
-        'div:contains("vérification")',
-        'div:contains("robot")',
-        'div:contains("bot")',
-        
         // Slider/puzzle verifications
         '.slider-verification',
         '[class*="slider"]',
         '.puzzle-verification'
+      ]
+      
+      // Search for HelloWork specific bot detection text (separate from CSS selectors)
+      const botDetectionTexts = [
+        'Nous vérifions que vous n\'êtes pas un',
+        'vérification',
+        'robot',
+        'bot'
       ]
 
       let captchaFound = false
@@ -834,8 +840,38 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
     try {
       this.logger.info('🔍 Searching for jobs on HelloWork', criteria)
       
-      // Navigate to job search page using the correct URL
-      await this.page.goto(this.searchUrl, { 
+      // Build HelloWork search URL with proper parameters based on your discovery
+      const topSkills = criteria.keywords.slice(0, 2) // Take first 2 skills for better results
+      const searchKeywords = topSkills.join('+') // HelloWork uses + to combine skills
+      const location = (criteria.location || 'france').toLowerCase()
+      
+      // Construct HelloWork search URL with all parameters
+      const searchParams = new URLSearchParams({
+        'k': searchKeywords,
+        'k_autocomplete': '',
+        'l': location,
+        'l_autocomplete': '',
+        'st': 'relevance', // Sort by relevance
+        'cod': 'all', // All categories
+        'ray': '2000', // 20km radius
+        'd': 'all' // All dates
+      })
+      
+      // Add contract types (CDI, CDD, Freelance)
+      searchParams.append('c', 'CDI')
+      searchParams.append('c', 'CDD')
+      searchParams.append('c', 'Freelance')
+      
+      const searchUrlWithParams = `https://www.hellowork.com/fr-fr/emploi/recherche.html?${searchParams.toString()}`
+      
+      this.logger.info('Navigating directly to HelloWork search results', { 
+        searchUrl: searchUrlWithParams,
+        keywords: topSkills,
+        location
+      })
+      
+      // Navigate directly to search results page
+      await this.page.goto(searchUrlWithParams, { 
         waitUntil: 'networkidle2',
         timeout: 30000 
       })
@@ -846,155 +882,14 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
       // Take screenshot of search page
       await this.takeScreenshot('04-search-page')
 
-      // Wait for page to fully load with reading behavior
+      // Wait for search results to load with reading behavior
       const searchPageLoadDelay = HumanDelays.pageLoadDelay()
       await MouseMovements.simulateReading(this.page, searchPageLoadDelay, this.logger)
 
-      // Fill search criteria with human-like behavior
-      const searchQuery = criteria.keywords.join(' ')
-      this.logger.info('Filling search criteria', { searchQuery, location: criteria.location })
+      this.logger.info('Search URL loaded, checking for results...')
       
-      // Find and fill job search input with multiple selectors based on actual HelloWork HTML structure
-      const jobSearchSelectors = [
-        'input[name="Job"]', // HelloWork uses Job as the name for job search field
-        'input[id="Job"]', // HelloWork search page uses Job as id
-        'input[placeholder*="Chef de projet, vendeur, comptable" i]', // Actual HelloWork placeholder
-        'input[name="q"]',
-        'input[name="keywords"]', 
-        'input[name="what"]',
-        'input[placeholder*="métier" i]',
-        'input[placeholder*="poste" i]',
-        'input[placeholder*="emploi" i]',
-        'input[id*="search"]',
-        '#q',
-        '#keywords'
-      ]
-      
-      let jobSearchField = null
-      for (const selector of jobSearchSelectors) {
-        try {
-          jobSearchField = await this.page.waitForSelector(selector, { timeout: 2000 })
-          if (jobSearchField) {
-            this.logger.debug(`Found job search field with selector: ${selector}`)
-            break
-          }
-        } catch (error) {
-          continue
-        }
-      }
-      
-      if (!jobSearchField) {
-        await this.takeScreenshot('05-no-search-field-found')
-        throw new Error('Could not find job search input field')
-      }
-      
-      // Find the working selector again for typing
-      let foundJobSearchSelector = ''
-      for (const selector of jobSearchSelectors) {
-        try {
-          const element = await this.page.$(selector)
-          if (element) {
-            foundJobSearchSelector = selector
-            break
-          }
-        } catch (error) {
-          continue
-        }
-      }
-      
-      await humanSleep(HumanDelays.formInteractionDelay(), 'Thinking about job search terms', this.logger)
-      await this.humanType(foundJobSearchSelector, searchQuery)
-      this.logger.success('Job search field filled')
-
-      // Find and fill location input
-      const locationSelectors = [
-        'input[name="Locality"]', // HelloWork uses Locality as the name for location field
-        'input[id="Locality"]', // HelloWork search page uses Locality as id
-        'input[placeholder*="Ville, département, code postal" i]', // Actual HelloWork placeholder
-        'input[name="l"]',
-        'input[name="location"]',
-        'input[name="where"]',
-        'input[placeholder*="lieu" i]',
-        'input[placeholder*="ville" i]',
-        'input[placeholder*="localisation" i]',
-        'input[id*="location"]',
-        '#l',
-        '#location'
-      ]
-      
-      let locationField = null
-      for (const selector of locationSelectors) {
-        try {
-          locationField = await this.page.waitForSelector(selector, { timeout: 2000 })
-          if (locationField) {
-            this.logger.debug(`Found location field with selector: ${selector}`)
-            
-            // Find working selector for typing
-            let foundLocationSelector = ''
-            for (const locSelector of locationSelectors) {
-              try {
-                const element = await this.page.$(locSelector)
-                if (element) {
-                  foundLocationSelector = locSelector
-                  break
-                }
-              } catch (error) {
-                continue
-              }
-            }
-            
-            await humanSleep(HumanDelays.navigationDelay(), 'Moving to location field', this.logger)
-            await this.humanType(foundLocationSelector, criteria.location)
-            this.logger.success('Location field filled')
-            break
-          }
-        } catch (locationError) {
-          continue
-        }
-      }
-      
-      if (!locationField) {
-        this.logger.warning('Location field not found, continuing without it')
-      }
-
-      // Submit search with human-like behavior
-      await humanSleep(HumanDelays.formInteractionDelay(), 'Reviewing search criteria', this.logger)
-      
-      const searchButtonSelectors = [
-        'form#searchForm button[type="submit"]', // HelloWork uses searchForm id
-        'form[data-turbo-frame="searchOfferFacetFrame"] button[type="submit"]', // HelloWork search form
-        'button[type="submit"]',
-        'input[type="submit"]',
-        'button:contains("Rechercher")',
-        'button:contains("Chercher")',
-        '.search-button',
-        '#search-button',
-        '[data-testid*="search"]'
-      ]
-      
-      let searchSubmitted = false
-      for (const selector of searchButtonSelectors) {
-        try {
-          // Move mouse to search button before clicking
-          await MouseMovements.moveToElement(this.page, selector, this.logger)
-          
-          // Brief pause before submitting search
-          await humanSleep(HumanDelays.randomDelay(300, 700), 'Final review before search', this.logger)
-          
-          await this.page.click(selector)
-          this.logger.success('Search form submitted')
-          searchSubmitted = true
-          break
-        } catch (error) {
-          continue
-        }
-      }
-      
-      if (!searchSubmitted) {
-        // Try pressing Enter on the search field as fallback
-        await this.page.keyboard.press('Enter')
-        this.logger.info('Search submitted via Enter key')
-      }
+      // Since we navigated directly to search results, no need to fill forms or click search
+      // The search parameters are already in the URL
 
       // Wait for search results with multiple possible selectors
       this.logger.debug('Waiting for search results to load')
@@ -1036,17 +931,18 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
 
       // Extract job listings based on HelloWork's actual HTML structure
       const jobs = await this.page.evaluate(() => {
-        // HelloWork uses complex job cards with specific structure
+        // HelloWork uses li elements with data-id-storage-item-id for job listings
         const jobElements = document.querySelectorAll(`
+          li[data-id-storage-item-id],
           .job-item, 
           .offre, 
           [data-testid*="job"], 
           .search-result,
-          article,
-          [class*="tw-max-h-"][class*="tw-min-h-"][class*="tw-relative"]:not([class*="tw-bg-black"]):has(img),
-          turbo-frame#turboSerp article,
-          turbo-frame#turboSerp .job-card
+          article
         `)
+        
+        console.log(`Found ${jobElements.length} job elements on the page`)
+        
         const jobs: Array<{
           id: string;
           title: string;
@@ -1060,62 +956,93 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
 
         jobElements.forEach((element, index) => {
           try {
-            // HelloWork job title selectors
-            const titleElement = element.querySelector(`
-              h2 a, h3 a, .job-title a, [data-testid*="title"] a,
-              .tw-typo-m a, .tw-typo-l a, 
-              a[href*="/emploi/"], a[href*="/offre/"]
-            `)
+            // Extract job ID from HelloWork's data attribute
+            const jobId = element.getAttribute('data-id-storage-item-id')
             
-            // HelloWork company selectors (often in images or specific divs)
-            const companyElement = element.querySelector(`
-              .company, .entreprise, [data-testid*="company"],
-              img[alt]:not([alt=""]), img[src*="media"],
-              .tw-z-\\[2\\], [class*="tw-bg-white"]:has(img)
-            `)
+            // Find the main job link - HelloWork uses href="/fr-fr/emplois/JOBID.html"
+            const linkElement = element.querySelector('a[href*="/fr-fr/emplois/"], a[href*="/emploi/"], a[href*="/offre/"]')
             
-            // HelloWork location selectors
-            const locationElement = element.querySelector(`
-              .location, .lieu, [data-testid*="location"],
-              .tw-text-grey-500, [class*="tw-text-grey"]
-            `)
+            // Extract job title from the H3 structure
+            let jobTitle = ''
+            const h3Element = element.querySelector('h3')
+            if (h3Element) {
+              // Job title is in the first <p> inside <h3>
+              const titleP = h3Element.querySelector('p')
+              jobTitle = titleP?.textContent?.trim() || ''
+            }
             
-            // HelloWork description selectors
-            const descriptionElement = element.querySelector(`
-              .description, .resume, .job-description,
-              .tw-typo-s, [class*="tw-typo"]:not([class*="tw-typo-m"]):not([class*="tw-typo-l"])
-            `)
-            
-            // HelloWork job link selectors
-            const linkElement = element.querySelector(`
-              a[href*="/emploi/"], a[href*="/offre/"], 
-              a[href*="hellowork.com/"]
-            `)
-
-            // Extract company name from image alt or other sources
+            // Extract company name from the second <p> inside <h3>
             let companyName = ''
-            if (companyElement) {
-              if (companyElement.tagName === 'IMG') {
-                companyName = (companyElement as HTMLImageElement).alt || ''
-              } else {
-                companyName = companyElement.textContent?.trim() || ''
+            if (h3Element) {
+              const paragraphs = h3Element.querySelectorAll('p')
+              if (paragraphs.length > 1) {
+                companyName = paragraphs[1].textContent?.trim() || ''
+              }
+            }
+            
+            // Alternative: get company from image alt attribute
+            if (!companyName) {
+              const companyImg = element.querySelector('img[alt]')
+              if (companyImg) {
+                companyName = companyImg.getAttribute('alt') || ''
+              }
+            }
+            
+            // Extract location from the location tag
+            let location = ''
+            const locationElement = element.querySelector('[data-cy="localisationCard"]')
+            if (locationElement) {
+              location = locationElement.textContent?.trim() || ''
+            }
+            
+            // Extract contract type
+            let contractType = ''
+            const contractElement = element.querySelector('[data-cy="contractCard"]')
+            if (contractElement) {
+              contractType = contractElement.textContent?.trim() || ''
+            }
+            
+            // Extract salary if available
+            let salary = ''
+            const salaryElements = element.querySelectorAll('.tw-typo-s-bold')
+            for (const el of salaryElements) {
+              const text = el.textContent?.trim() || ''
+              if (text.includes('€') || text.includes('000')) {
+                salary = text
+                break
               }
             }
 
-            if (titleElement && linkElement && (companyName || companyElement)) {
-              jobs.push({
-                id: `hw_real_${Date.now()}_${index}`,
-                title: titleElement.textContent?.trim() || '',
-                company: companyName,
-                location: locationElement?.textContent?.trim() || '',
-                description: descriptionElement?.textContent?.trim() || '',
-                url: linkElement.getAttribute('href') || '',
+            // Build full URL
+            let jobUrl = linkElement?.getAttribute('href') || ''
+            if (jobUrl && !jobUrl.startsWith('http')) {
+              jobUrl = 'https://www.hellowork.com' + jobUrl
+            }
+
+            // Create description from available details
+            const description = [contractType, salary].filter(Boolean).join(' - ')
+
+            if (jobTitle && jobUrl && jobId) {
+              const jobData = {
+                id: jobId,
+                title: jobTitle,
+                company: companyName || 'Company not specified',
+                location: location || 'Location not specified',
+                description: description || 'No description available',
+                url: jobUrl,
                 postedDate: new Date(),
                 requirements: []
-              })
+              }
+              jobs.push(jobData)
+              console.log(`✅ Found job ${index + 1}: "${jobTitle}" at "${companyName}" (${location}) - URL: ${jobUrl}`)
+            } else {
+              console.log(`❌ Skipping job ${index + 1}: Missing data - Title: "${jobTitle}", URL: "${jobUrl}", ID: "${jobId}"`)
+              if (linkElement) {
+                console.log(`   Link found but missing other data. Link href: ${linkElement.getAttribute('href')}`)
+              }
             }
           } catch (error) {
-            console.error('Error extracting job data:', error)
+            console.error(`Error extracting job ${index + 1}:`, error)
           }
         })
 
@@ -1321,27 +1248,79 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
         }
       }
 
-      // Navigate to job detail page (assuming URL is in job data)
-      // In real implementation, you'd store the job URL during search
-      const jobUrl = `${this.baseUrl}/emploi/offre/${jobId.replace('hw_real_', '')}`
+      // Navigate to job detail page using HelloWork URL format
+      // Check if jobId contains the actual URL or just the ID
+      let jobUrl: string
+      if (jobId.startsWith('http')) {
+        jobUrl = jobId // jobId is actually the full URL
+      } else if (jobId.match(/^\d+$/)) {
+        jobUrl = `${this.baseUrl}/fr-fr/emplois/${jobId}.html`
+      } else {
+        // Extract ID from HelloWork job ID format
+        const id = jobId.replace('hw_real_', '').replace(/.*_/, '')
+        jobUrl = `${this.baseUrl}/fr-fr/emplois/${id}.html`
+      }
+      
+      console.log(`🔗 Navigating to job page: ${jobUrl}`)
       await this.page.goto(jobUrl, { waitUntil: 'networkidle2' })
 
-      // Look for "Apply" button
+      // Scroll to the application section which contains the pre-filled form
+      await this.page.evaluate(() => {
+        const applySection = document.querySelector('#postuler, .tw-bg-purple-200, [data-controller*="intersect"]')
+        if (applySection) {
+          applySection.scrollIntoView({ behavior: 'smooth' })
+        }
+      })
+
+      // Wait for the application form to be visible
+      await this.page.waitForSelector('#postuler, form[id*="apply"], .tw-bg-purple-200', { timeout: 10000 })
+
+      // Take screenshot of the application section
+      await this.takeScreenshot('07-application-form')
+
+      // Look for "Postuler" submit button - HelloWork has specific structure based on the HTML provided
       const applyButtonSelectors = [
-        'button:contains("Postuler")',
-        'a:contains("Postuler")',
-        'button[data-testid*="apply"]',
-        '.btn-apply',
-        '.postuler'
+        'button[type="submit"][data-cy="submitButton"]',
+        'button.tw-btn-primary-candidacy-l',
+        'button[formid="apply-form"]',
+        'button[data-form-validator-target="button"]',
+        '#postuler button[type="submit"]'
       ]
 
       let applyButton = null
       for (const selector of applyButtonSelectors) {
         try {
           applyButton = await this.page.waitForSelector(selector, { timeout: 3000 })
-          if (applyButton) break
+          if (applyButton) {
+            this.logger.success(`Found apply button with selector: ${selector}`)
+            break
+          }
         } catch (error) {
           continue
+        }
+      }
+
+      // If no specific button found, use evaluate to search by text content
+      if (!applyButton) {
+        try {
+          // Find button by text content using evaluate
+          const buttonFound = await this.page.evaluate(() => {
+            const buttons = Array.from(document.querySelectorAll('button'))
+            const postulButton = buttons.find(btn => btn.textContent?.includes('Postuler'))
+            if (postulButton) {
+              // Add a temporary data attribute to find it later
+              postulButton.setAttribute('data-temp-apply-btn', 'true')
+              return true
+            }
+            return false
+          })
+          
+          if (buttonFound) {
+            applyButton = await this.page.$('button[data-temp-apply-btn="true"]')
+            this.logger.success('Found apply button by text content')
+          }
+        } catch (error) {
+          applyButton = null
         }
       }
 
@@ -1350,152 +1329,85 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
           success: false,
           jobId,
           message: 'Apply button not found',
-          error: 'Could not locate application button on job page'
+          error: 'Could not locate Postuler button on job page'
         }
       }
 
-      // Click apply button
-      await applyButton.click()
-
-      // Wait for application form
-      await this.page.waitForSelector('form, .application-form, [data-testid*="application"]', { timeout: 10000 })
-
-      // Fill application form
+      // Check if form is already pre-filled (HelloWork usually pre-fills email and CV)
+      this.logger.info('Checking pre-filled application form')
+      
+      // HelloWork pre-fills the form, but we can optionally add a custom message
       try {
-        // Look for cover letter field with human-like behavior
-        const coverLetterSelectors = [
-          'textarea[name*="cover"]', 
-          'textarea[name*="lettre"]', 
-          'textarea[placeholder*="motivation" i]',
-          'textarea[id*="cover"]',
-          'textarea[id*="lettre"]'
-        ]
-        
-        this.logger.debug('Looking for cover letter field')
-        let coverLetterFilled = false
-        
-        for (const selector of coverLetterSelectors) {
-          try {
-            const field = await this.page.$(selector)
-            if (field) {
-              await humanSleep(HumanDelays.formInteractionDelay(), 'Preparing cover letter', this.logger)
-              
-              // Clear existing content and type with human-like behavior
-              await field.click({ clickCount: 3 }) // Select all
-              await this.page.keyboard.press('Delete')
-              
-              // Type cover letter with realistic speed
-              for (const char of application.coverLetter) {
-                await this.page.keyboard.type(char)
-                await humanSleep(HumanDelays.randomDelay(30, 100))
-              }
-              
-              this.logger.success('Cover letter filled')
-              coverLetterFilled = true
-              break
-            }
-          } catch (coverLetterError) {
-            continue
-          }
-        }
-
-        if (!coverLetterFilled) {
-          this.logger.warning('Could not find cover letter field')
-        }
-
-        // Look for additional message field
-        if (application.customMessage) {
-          const messageSelectors = [
-            'textarea[name*="message"]', 
-            'input[name*="message"]',
-            'textarea[placeholder*="message" i]'
-          ]
+        // Check if cover letter/motivation field exists and is expandable
+        const motivationToggle = await this.page.$('label[for="cover-letter-collapse"]')
+        if (motivationToggle) {
+          this.logger.debug('Found motivation field toggle, expanding it')
+          await motivationToggle.click()
+          await humanSleep(HumanDelays.formInteractionDelay(), 'Expanding motivation field', this.logger)
           
-          this.logger.debug('Looking for custom message field')
-          
-          for (const selector of messageSelectors) {
-            try {
-              const field = await this.page.$(selector)
-              if (field) {
-                await humanSleep(HumanDelays.formInteractionDelay(), 'Adding custom message', this.logger)
-                await field.click({ clickCount: 3 })
-                await this.page.keyboard.press('Delete')
-                
-                for (const char of application.customMessage) {
-                  await this.page.keyboard.type(char)
-                  await humanSleep(HumanDelays.randomDelay(30, 100))
-                }
-                
-                this.logger.success('Custom message filled')
-                break
-              }
-            } catch (messageError) {
-              continue
+          // Look for the motivation textarea
+          const motivationField = await this.page.$('#Answer_Description, textarea[name="Description"]')
+          if (motivationField && application.coverLetter) {
+            await humanSleep(HumanDelays.formInteractionDelay(), 'Filling motivation message', this.logger)
+            
+            // Click and fill the motivation field
+            await motivationField.click()
+            await humanSleep(HumanDelays.randomDelay(500, 1000))
+            
+            // Type cover letter with realistic speed
+            for (const char of application.coverLetter) {
+              await this.page.keyboard.type(char)
+              await humanSleep(HumanDelays.randomDelay(30, 100))
             }
+            
+            this.logger.success('Motivation message added')
           }
         }
-
-        // Handle file upload for resume if needed
-        if (this.config.applicationSettings.resumeUrl) {
-          console.log('⚠️ Resume upload detected but file handling not implemented in this demo')
-        }
-
-        // Take screenshot before submission
-        if (process.env.NODE_ENV !== 'production') {
-          await this.page.screenshot({ path: `hellowork-application-${jobId}.png`, fullPage: true })
-        }
-
-        // Submit application
-        const submitSelectors = [
-          'button[type="submit"]',
-          'button:contains("Envoyer")',
-          'button:contains("Postuler")',
-          '.btn-submit'
-        ]
-
-        let submitted = false
-        for (const selector of submitSelectors) {
-          try {
-            await this.page.click(selector)
-            submitted = true
-            console.log('✅ Application submitted!')
-            break
-          } catch (error) {
-            continue
-          }
-        }
-
-        if (!submitted) {
-          throw new Error('Could not find submit button')
-        }
-
-        // Wait for confirmation
-        try {
-          await this.page.waitForSelector(
-            '.success, .confirmation, :contains("candidature envoyée")', 
-            { timeout: 10000 }
-          )
-        } catch (error) {
-          console.log('⚠️ No confirmation message detected, but application may have been sent')
-        }
-
-        const applicationId = `app_${Date.now()}_${Math.random().toString(36).substring(7)}`
-        
-        return {
-          success: true,
-          jobId,
-          message: 'Application submitted successfully to HelloWork',
-          applicationId
-        }
-
       } catch (error) {
-        console.error('❌ Error filling application form:', error)
-        return {
-          success: false,
-          jobId,
-          message: 'Failed to fill application form',
-          error: error instanceof Error ? error.message : 'Unknown form error'
+        this.logger.warning('Could not add custom motivation message, proceeding with pre-filled form')
+      }
+
+      // Handle file upload for resume if needed
+      if (this.config.applicationSettings.resumeUrl) {
+        console.log('⚠️ Resume upload detected but file handling not implemented in this demo')
+      }
+
+      // Take screenshot before submission
+      await this.takeScreenshot('08-before-application-submit')
+
+      // Click the Postuler button to submit application
+      await humanSleep(HumanDelays.formInteractionDelay(), 'Preparing to submit application', this.logger)
+      
+      await applyButton.click()
+      this.logger.success('Application submit button clicked')
+
+      // Wait for confirmation or redirect
+      try {
+        await this.page.waitForSelector(
+          '.success, .confirmation, [class*="success"], [class*="confirm"]', 
+          { timeout: 10000 }
+        )
+        this.logger.success('Application confirmation detected')
+      } catch (error) {
+        // Check if we were redirected to a success page
+        const currentUrl = this.page.url()
+        if (currentUrl.includes('success') || currentUrl.includes('confirmation')) {
+          this.logger.success('Redirected to confirmation page')
+        } else {
+          this.logger.warning('No confirmation detected, but application may have been sent')
         }
+      }
+
+      // Take final screenshot
+      await this.takeScreenshot('09-application-completed')
+
+      const applicationId = `app_${Date.now()}_${Math.random().toString(36).substring(7)}`
+      
+      return {
+        success: true,
+        jobId,
+        message: 'Application submitted successfully to HelloWork',
+        applicationId
       }
 
     } catch (error) {
@@ -1507,6 +1419,67 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
         error: error instanceof Error ? error.message : 'Unknown error'
       }
     }
+  }
+
+  /**
+   * Automated job search and application workflow
+   */
+  async searchAndApplyToJobs(criteria: SearchCriteria, application: ApplicationData): Promise<{
+    searchResults: JobListing[]
+    applications: AutoApplicationResult[]
+  }> {
+    console.log('🚀 Starting automated job search and application process...')
+    
+    // First, search for jobs
+    const jobs = await this.searchJobs(criteria)
+    console.log(`📋 Found ${jobs.length} jobs matching criteria`)
+    
+    if (jobs.length === 0) {
+      return { searchResults: [], applications: [] }
+    }
+    
+    const applications: AutoApplicationResult[] = []
+    
+    // Apply to each job found
+    for (let i = 0; i < jobs.length; i++) {
+      const job = jobs[i]
+      console.log(`\n📤 Applying to job ${i + 1}/${jobs.length}: "${job.title}" at "${job.company}"`)
+      
+      try {
+        // Use the job URL directly for application
+        const result = await this.applyToJob(job.url, application)
+        applications.push(result)
+        
+        if (result.success) {
+          console.log(`✅ Successfully applied to "${job.title}"`)
+        } else {
+          console.log(`❌ Failed to apply to "${job.title}": ${result.error}`)
+        }
+        
+        // Add delay between applications to appear human-like
+        if (i < jobs.length - 1) {
+          const delay = Math.random() * 30000 + 15000 // 15-45 seconds
+          console.log(`⏱️ Waiting ${Math.round(delay/1000)} seconds before next application...`)
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
+        
+      } catch (error) {
+        console.error(`❌ Error applying to job "${job.title}":`, error)
+        applications.push({
+          success: false,
+          jobId: job.id,
+          message: 'Application process failed',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        })
+      }
+    }
+    
+    console.log(`\n📊 Application Summary:`)
+    const successful = applications.filter(app => app.success).length
+    console.log(`   ✅ Successful applications: ${successful}`)
+    console.log(`   ❌ Failed applications: ${applications.length - successful}`)
+    
+    return { searchResults: jobs, applications }
   }
 
   async logout(): Promise<void> {
