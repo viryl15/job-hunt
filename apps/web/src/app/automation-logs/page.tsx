@@ -3,10 +3,12 @@
 import { AutomationLogs } from '@/components/automation-logs'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Briefcase, Activity } from 'lucide-react'
+import { ArrowLeft, Briefcase, Activity, Trash2 } from 'lucide-react'
 import Link from 'next/link'
+import { useRef } from 'react'
 
 export default function AutomationLogsPage() {
+  const automationLogsRef = useRef<any>(null)
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -82,7 +84,7 @@ export default function AutomationLogsPage() {
         </div>
 
         {/* Main Automation Logs Component */}
-        <AutomationLogs />
+        <AutomationLogs ref={automationLogsRef} />
 
         {/* Quick Actions */}
         <div className="mt-8">
@@ -100,11 +102,22 @@ export default function AutomationLogsPage() {
                     Start New Automation
                   </Button>
                 </Link>
-                <Button variant="outline">
-                  Download All Logs
+                <Button 
+                  variant="outline"
+                  onClick={() => automationLogsRef.current?.clearLogs()}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Clear Logs
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => automationLogsRef.current?.clearScreenshots()}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Clear Old Screenshots
                 </Button>
                 <Button variant="outline">
-                  Clear Old Screenshots
+                  Download All Logs
                 </Button>
                 <Button variant="outline">
                   Export Session Reports

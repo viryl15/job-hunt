@@ -149,3 +149,127 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+// Delete logs and screenshots
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const action = searchParams.get('action') // 'clear-logs', 'clear-screenshots', 'delete-screenshot'
+    const configId = searchParams.get('configId')
+    const screenshot = searchParams.get('screenshot')
+
+    if (!action) {
+      return NextResponse.json(
+        { success: false, error: 'Action is required' },
+        { status: 400 }
+      )
+    }
+
+    switch (action) {
+      case 'clear-logs':
+        // Clear all log files for a specific config
+        if (!configId) {
+          return NextResponse.json(
+            { success: false, error: 'Config ID is required for clearing logs' },
+            { status: 400 }
+          )
+        }
+
+        const logsDir = path.join(process.cwd(), 'automation-logs')
+        if (fs.existsSync(logsDir)) {
+          const logFiles = fs.readdirSync(logsDir)
+          const configLogs = logFiles.filter(file => 
+            file.includes(`automation-${configId}`) || 
+            file.includes(`session-report-${configId}`)
+          )
+
+          let deletedCount = 0
+          for (const logFile of configLogs) {
+            fs.unlinkSync(path.join(logsDir, logFile))
+            deletedCount++
+          }
+
+          return NextResponse.json({
+            success: true,
+            message: `Deleted ${deletedCount} log file(s)`,
+            data: { deletedCount }
+          })
+        }
+        break
+
+      case 'clear-screenshots':
+        // Clear all screenshots for a specific config
+        if (!configId) {
+          return NextResponse.json(
+            { success: false, error: 'Config ID is required for clearing screenshots' },
+            { status: 400 }
+          )
+        }
+
+        const screenshotsDir = path.join(process.cwd(), 'automation-screenshots')
+        if (fs.existsSync(screenshotsDir)) {
+          const screenshotFiles = fs.readdirSync(screenshotsDir)
+          const configScreenshots = screenshotFiles.filter(file => 
+            file.includes(configId)
+          )
+
+          let deletedCount = 0
+          for (const screenshotFile of configScreenshots) {
+            fs.unlinkSync(path.join(screenshotsDir, screenshotFile))
+            deletedCount++
+          }
+
+          return NextResponse.json({
+            success: true,
+            message: `Deleted ${deletedCount} screenshot(s)`,
+            data: { deletedCount }
+          })
+        }
+        break
+
+      case 'delete-screenshot':
+        // Delete a specific screenshot
+        if (!screenshot) {
+          return NextResponse.json(
+            { success: false, error: 'Screenshot filename is required' },
+            { status: 400 }
+          )
+        }
+
+        const screenshotPath = path.join(process.cwd(), 'automation-screenshots', path.basename(screenshot))
+        if (fs.existsSync(screenshotPath)) {
+          fs.unlinkSync(screenshotPath)
+          return NextResponse.json({
+            success: true,
+            message: 'Screenshot deleted successfully'
+          })
+        } else {
+          return NextResponse.json(
+            { success: false, error: 'Screenshot not found' },
+            { status: 404 }
+          )
+        }
+
+      default:
+        return NextResponse.json(
+          { success: false, error: 'Invalid action' },
+          { status: 400 }
+        )
+    }
+
+    return NextResponse.json({
+      success: false,
+      error: 'Directory not found'
+    }, { status: 404 })
+
+  } catch (error) {
+    console.error('Failed to delete:', error)
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Failed to delete' 
+      },
+      { status: 500 }
+    )
+  }
+}

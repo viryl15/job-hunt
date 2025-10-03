@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { RefreshCw, Download, Eye, Camera } from 'lucide-react'
+import { RefreshCw, Download, Eye, Camera, Trash2 } from 'lucide-react'
 
 interface AutomationLogsProps {
   configId?: string
@@ -38,7 +38,12 @@ interface SessionReport {
   duration?: string
 }
 
-export function AutomationLogs({ configId }: AutomationLogsProps) {
+export interface AutomationLogsHandle {
+  clearLogs: () => void
+  clearScreenshots: () => void
+}
+
+export const AutomationLogs = forwardRef<AutomationLogsHandle, AutomationLogsProps>(({ configId }, ref) => {
   const [logs, setLogs] = useState<string[]>([])
   const [sessionReport, setSessionReport] = useState<SessionReport | null>(null)
   const [screenshots, setScreenshots] = useState<string[]>([])
@@ -192,6 +197,90 @@ export function AutomationLogs({ configId }: AutomationLogsProps) {
     URL.revokeObjectURL(url)
   }
 
+  const clearLogs = async () => {
+    if (!selectedConfig) return
+    
+    if (!confirm('Are you sure you want to delete all logs for this configuration?')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/automation-logs?action=clear-logs&configId=${selectedConfig}`, {
+        method: 'DELETE'
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        alert(result.message)
+        setLogs([])
+        fetchLogs()
+      } else {
+        alert(`Failed to clear logs: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Failed to clear logs:', error)
+      alert('Failed to clear logs')
+    }
+  }
+
+  const clearScreenshots = async () => {
+    if (!selectedConfig) return
+    
+    if (!confirm('Are you sure you want to delete all screenshots for this configuration?')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/automation-logs?action=clear-screenshots&configId=${selectedConfig}`, {
+        method: 'DELETE'
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        alert(result.message)
+        setScreenshots([])
+        fetchLogs()
+      } else {
+        alert(`Failed to clear screenshots: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Failed to clear screenshots:', error)
+      alert('Failed to clear screenshots')
+    }
+  }
+
+  const deleteScreenshot = async (screenshot: string) => {
+    if (!confirm('Are you sure you want to delete this screenshot?')) {
+      return
+    }
+
+    try {
+      const filename = screenshot.split('/').pop()
+      const response = await fetch(`/api/automation-logs?action=delete-screenshot&screenshot=${filename}`, {
+        method: 'DELETE'
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        setScreenshots(prev => prev.filter(s => s !== screenshot))
+      } else {
+        alert(`Failed to delete screenshot: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Failed to delete screenshot:', error)
+      alert('Failed to delete screenshot')
+    }
+  }
+
+  // Expose functions to parent component via ref
+  useImperativeHandle(ref, () => ({
+    clearLogs,
+    clearScreenshots
+  }))
+
   return (
     <Card className="w-full max-w-6xl">
       <CardHeader>
@@ -321,23 +410,41 @@ export function AutomationLogs({ configId }: AutomationLogsProps) {
                   </div>
                 ) : (
                   screenshots.map((screenshot, index) => (
-                    <Card key={index} className="cursor-pointer hover:bg-muted/50">
+                    <Card key={index} className="cursor-pointer hover:bg-muted/50 relative group">
                       <CardContent className="p-4">
                         <div 
-                          className="flex items-center gap-2 mb-2"
-                          onClick={() => setSelectedScreenshot(screenshot)}
+                          className="flex items-center justify-between gap-2 mb-2"
                         >
-                          <Camera className="h-4 w-4" />
-                          <span className="text-sm font-medium">
-                            Screenshot {index + 1}
-                          </span>
+                          <div 
+                            className="flex items-center gap-2 flex-1"
+                            onClick={() => setSelectedScreenshot(screenshot)}
+                          >
+                            <Camera className="h-4 w-4" />
+                            <span className="text-sm font-medium">
+                              Screenshot {index + 1}
+                            </span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-100"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              deleteScreenshot(screenshot)
+                            }}
+                            title="Delete screenshot"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
-                        <img
-                          src={screenshot}
-                          alt={`Screenshot ${index + 1}`}
-                          className="w-full h-32 object-cover rounded border"
-                          onClick={() => setSelectedScreenshot(screenshot)}
-                        />
+                        <div className="relative">
+                          <img
+                            src={screenshot}
+                            alt={`Screenshot ${index + 1}`}
+                            className="w-full h-32 object-cover rounded border"
+                            onClick={() => setSelectedScreenshot(screenshot)}
+                          />
+                        </div>
                       </CardContent>
                     </Card>
                   ))
@@ -417,6 +524,6 @@ export function AutomationLogs({ configId }: AutomationLogsProps) {
       </CardContent>
     </Card>
   )
-}
+})
 
-export default AutomationLogs
+AutomationLogs.displayName = 'AutomationLogs'
