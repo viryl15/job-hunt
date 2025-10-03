@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Link from "next/link";
+import { SessionProvider } from "@/components/session-provider";
 import "./globals.css";
 
 const inter = Inter({
@@ -32,7 +33,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen bg-background font-sans antialiased">
-        <nav className="border-b bg-background">
+        <SessionProvider>
+          <nav className="border-b bg-background">
           <div className="container mx-auto px-4">
             <div className="flex h-16 items-center space-x-8">
               <Link href="/" className="text-xl font-bold">
@@ -68,9 +70,10 @@ export default function RootLayout({
             </div>
           </div>
         </nav>
-        <main>
-          {children}
-        </main>
+          <main>
+            {children}
+          </main>
+        </SessionProvider>
       </body>
     </html>
   );

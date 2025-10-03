@@ -39,14 +39,16 @@ export default function HomePage() {
             automated applications, and privacy-conscious approach to finding your next role.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/dashboard">
+            <Link href="/auth/signin">
               <Button size="lg" className="text-lg px-8 py-3">
-                Get Started (Dev Mode)
+                Sign In with Google
               </Button>
             </Link>
-            <Button variant="outline" size="lg" className="text-lg px-8 py-3">
-              Learn More
-            </Button>
+            <Link href="/dashboard">
+              <Button variant="outline" size="lg" className="text-lg px-8 py-3">
+                Dev Mode (Skip Login)
+              </Button>
+            </Link>
           </div>
         </div>
 

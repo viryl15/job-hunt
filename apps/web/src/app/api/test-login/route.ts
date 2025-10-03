@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
     // Create test config
     const testConfig: JobBoardConfig = {
       id: `test-login-${Date.now()}`,
+      userId: 'test-user',
       boardName: 'HelloWork',
       boardUrl: 'https://www.hellowork.com',
       credentials: {
@@ -35,6 +36,7 @@ export async function POST(request: NextRequest) {
         remotePreference: 'any'
       },
       applicationSettings: {
+        autoApply: true,
         coverLetterTemplate: `Madame, Monsieur,
 
 Je vous écris pour exprimer mon intérêt pour le poste de {{JOB_TITLE}} au sein de {{COMPANY_NAME}}.
@@ -51,7 +53,9 @@ Cordialement,
         resumeUrl: '',
         customMessage: 'Test message'
       },
-      isActive: true
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
     }
 
     // Test login

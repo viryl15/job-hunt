@@ -59,7 +59,7 @@ export function JobBoardConfigForm({ config, onSave, onCancel }: JobBoardConfigF
       resumeUrl: config?.applicationSettings?.resumeUrl || '',
       customMessage: config?.applicationSettings?.customMessage || ''
     },
-    isActive: config?.isActive || true
+    isActive: config?.isActive ?? true
   })
 
   const [newSkill, setNewSkill] = useState('')
@@ -190,7 +190,7 @@ export function JobBoardConfigForm({ config, onSave, onCancel }: JobBoardConfigF
                 <Switch
                   id="isActive"
                   checked={formData.isActive}
-                  onCheckedChange={(checked: boolean) => setFormData(prev => ({ ...prev, isActive: checked }))}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isActive: Boolean(checked) }))}
                 />
                 <Label htmlFor="isActive">Enable automated applications</Label>
               </div>
@@ -268,10 +268,10 @@ export function JobBoardConfigForm({ config, onSave, onCancel }: JobBoardConfigF
                 <Label>Remote Work Preference</Label>
                 <Select 
                   value={formData.preferences.remotePreference} 
-                  onValueChange={(value: 'remote' | 'hybrid' | 'onsite' | 'any') => 
+                  onValueChange={(value) => 
                     setFormData(prev => ({
                       ...prev,
-                      preferences: { ...prev.preferences, remotePreference: value }
+                      preferences: { ...prev.preferences, remotePreference: value as 'remote' | 'hybrid' | 'onsite' | 'any' }
                     }))
                   }
                 >
