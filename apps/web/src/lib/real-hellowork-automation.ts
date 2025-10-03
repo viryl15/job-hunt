@@ -1052,9 +1052,7 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
       console.log(`✅ Found ${jobs.length} real jobs on HelloWork`)
 
       // Take screenshot of results for debugging
-      if (process.env.NODE_ENV !== 'production') {
-        await this.page.screenshot({ path: 'hellowork-search-results.png', fullPage: true })
-      }
+      await this.takeScreenshot('06-search-results-detailed')
 
       return jobs
     } catch (error) {
@@ -1264,35 +1262,24 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
       console.log(`🔗 Navigating to job page: ${jobUrl}`)
       await this.page.goto(jobUrl, { waitUntil: 'networkidle2' })
 
-      // Scroll to the application section which contains the pre-filled form
-      await this.page.evaluate(() => {
-        const applySection = document.querySelector('#postuler, .tw-bg-purple-200, [data-controller*="intersect"]')
-        if (applySection) {
-          applySection.scrollIntoView({ behavior: 'smooth' })
-        }
-      })
+      // Take screenshot of job detail page
+      await this.takeScreenshot('07-job-detail-page')
 
-      // Wait for the application form to be visible
-      await this.page.waitForSelector('#postuler, form[id*="apply"], .tw-bg-purple-200', { timeout: 10000 })
-
-      // Take screenshot of the application section
-      await this.takeScreenshot('07-application-form')
-
-      // Look for "Postuler" submit button - HelloWork has specific structure based on the HTML provided
-      const applyButtonSelectors = [
-        'button[type="submit"][data-cy="submitButton"]',
-        'button.tw-btn-primary-candidacy-l',
-        'button[formid="apply-form"]',
-        'button[data-form-validator-target="button"]',
-        '#postuler button[type="submit"]'
+      // STEP 1: Find and click the first "Postuler" button to navigate to application form
+      this.logger.info('Looking for navigation apply button (first button)')
+      const navigationButtonSelectors = [
+        'a[href="#postuler"][data-cy="applyButton"]',
+        'a[href="#postuler"].tw-btn-primary-candidacy-l',
+        'a[href="#postuler"]',
+        '.tw-btn-primary-candidacy-l[href="#postuler"]'
       ]
 
-      let applyButton = null
-      for (const selector of applyButtonSelectors) {
+      let navigationButton = null
+      for (const selector of navigationButtonSelectors) {
         try {
-          applyButton = await this.page.waitForSelector(selector, { timeout: 3000 })
-          if (applyButton) {
-            this.logger.success(`Found apply button with selector: ${selector}`)
+          navigationButton = await this.page.$(selector)
+          if (navigationButton) {
+            this.logger.success(`Found navigation apply button: ${selector}`)
             break
           }
         } catch (error) {
@@ -1300,27 +1287,132 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
         }
       }
 
-      // If no specific button found, use evaluate to search by text content
+      if (navigationButton) {
+        this.logger.info('Clicking navigation apply button to reveal form')
+        await navigationButton.click()
+        await humanSleep(2000, 'Waiting after navigation button click', this.logger)
+      } else {
+        this.logger.warning('Navigation apply button not found, scrolling to application section')
+        // Fallback: scroll to application section
+        await this.page.evaluate(() => {
+          const applySection = document.querySelector('#postuler, .tw-bg-purple-200')
+          if (applySection) {
+            applySection.scrollIntoView({ behavior: 'smooth' })
+          }
+        })
+      }
+
+      // Wait for the purple application section to be visible
+      await this.page.waitForSelector('#postuler, .tw-bg-purple-200', { timeout: 10000 })
+      this.logger.success('Application section is visible')
+      
+      // Wait for the turbo-frame to start loading
+      await humanSleep(1000, 'Waiting for turbo-frame to start loading', this.logger)
+      
+      // Wait for the turbo-frame to load completely with multiple detection strategies
+      try {
+        // Strategy 1: Wait for the specific apply-form-frame to have complete attribute
+        await this.page.waitForFunction(() => {
+          const turboFrame = document.querySelector('turbo-frame#apply-form-frame')
+          return turboFrame && (turboFrame.hasAttribute('complete') || turboFrame.getAttribute('complete') === '')
+        }, { timeout: 15000 })
+        
+        this.logger.success('Turbo-frame loaded completely (complete attribute detected)')
+      } catch {
+        this.logger.debug('Turbo-frame complete attribute timeout, trying alternative detection')
+        
+        // Strategy 2: Wait for form elements to be present (form is loaded)
+        try {
+          await this.page.waitForSelector('turbo-frame#apply-form-frame form#apply-form', { timeout: 10000 })
+          this.logger.success('Turbo-frame loaded completely (form elements detected)')
+        } catch {
+          // Strategy 3: Check if submit button is already present
+          const submitButtonExists = await this.page.$('button[data-cy="submitButton"], button[type="submit"]')
+          if (submitButtonExists) {
+            this.logger.success('Turbo-frame loaded completely (submit button already present)')
+          } else {
+            this.logger.error('Turbo-frame loading detection failed with all strategies')
+            throw new Error('Could not detect turbo-frame loading completion')
+          }
+        }
+      }
+      
+      // Wait for the actual form elements to be present
+      await this.page.waitForSelector('form#apply-form, button[data-cy="submitButton"]', { timeout: 15000 })
+      
+      // Additional wait for form to be fully rendered
+      await humanSleep(3000, 'Waiting for form to be fully rendered', this.logger)
+
+      // Take screenshot of the loaded application form
+      await this.takeScreenshot('08-application-form-loaded')
+
+      // STEP 2: Look for the actual submit button inside the loaded form
+      this.logger.info('Looking for submit apply button (second button)')
+      const submitButtonSelectors = [
+        'button[type="submit"][data-cy="submitButton"]',
+        'button[formid="apply-form"][type="submit"]',
+        'button[data-form-validator-target="button"]',
+        'form#apply-form button[type="submit"]',
+        'turbo-frame button[type="submit"]',
+        '#postuler button[type="submit"].tw-btn-primary-candidacy-l'
+      ]
+
+      let applyButton = null
+      
+      for (const selector of submitButtonSelectors) {
+        try {
+          // Wait for button to exist and check if it's visible
+          const button = await this.page.waitForSelector(selector, { timeout: 5000 })
+          if (button) {
+            const isVisible = await this.page.evaluate((el) => {
+              const rect = el.getBoundingClientRect()
+              const computedStyle = window.getComputedStyle(el)
+              return rect.width > 0 && rect.height > 0 && 
+                     computedStyle.visibility !== 'hidden' && 
+                     computedStyle.display !== 'none'
+            }, button)
+            
+            if (isVisible) {
+              applyButton = button
+              this.logger.success(`Found visible submit button: ${selector}`)
+              break
+            } else {
+              this.logger.debug(`Submit button found but not visible: ${selector}`)
+            }
+          }
+        } catch (error) {
+          this.logger.debug(`Submit button not found: ${selector}`)
+        }
+      }
+
+      // If no specific button found, search by text content within turbo-frame
       if (!applyButton) {
         try {
-          // Find button by text content using evaluate
+          this.logger.debug('Searching for submit button by text content in turbo-frame...')
           const buttonFound = await this.page.evaluate(() => {
-            const buttons = Array.from(document.querySelectorAll('button'))
-            const postulButton = buttons.find(btn => btn.textContent?.includes('Postuler'))
-            if (postulButton) {
-              // Add a temporary data attribute to find it later
-              postulButton.setAttribute('data-temp-apply-btn', 'true')
+            // Look specifically within turbo-frame for the submit button
+            const turboFrame = document.querySelector('turbo-frame[id*="apply"], turbo-frame[complete]')
+            if (!turboFrame) return false
+            
+            const buttons = Array.from(turboFrame.querySelectorAll('button[type="submit"]'))
+            const submitButton = buttons.find(btn => 
+              btn.textContent?.includes('Postuler') && 
+              btn.getAttribute('data-cy') === 'submitButton'
+            )
+            
+            if (submitButton) {
+              submitButton.setAttribute('data-temp-submit-btn', 'true')
               return true
             }
             return false
           })
           
           if (buttonFound) {
-            applyButton = await this.page.$('button[data-temp-apply-btn="true"]')
-            this.logger.success('Found apply button by text content')
+            applyButton = await this.page.$('button[data-temp-submit-btn="true"]')
+            this.logger.success('Found submit button by text content in turbo-frame')
           }
         } catch (error) {
-          applyButton = null
+          this.logger.warning('Failed to find submit button by text content')
         }
       }
 
@@ -1373,33 +1465,88 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
       }
 
       // Take screenshot before submission
-      await this.takeScreenshot('08-before-application-submit')
+      await this.takeScreenshot('09-before-submit-button-click')
+      
+      // Log button information for debugging  
+      const buttonInfo = await this.page.evaluate((button) => {
+        const rect = button.getBoundingClientRect()
+        const element = button as HTMLButtonElement | HTMLInputElement
+        return {
+          tagName: button.tagName,
+          type: element.type || 'unknown',
+          className: button.className,
+          textContent: button.textContent?.trim(),
+          isVisible: rect.width > 0 && rect.height > 0,
+          coordinates: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+        }
+      }, applyButton)
+      
+      this.logger.debug('Submit button details', buttonInfo)
 
       // Click the Postuler button to submit application
       await humanSleep(HumanDelays.formInteractionDelay(), 'Preparing to submit application', this.logger)
       
-      await applyButton.click()
-      this.logger.success('Application submit button clicked')
+      try {
+        // Ensure button is in viewport and clickable
+        await this.page.evaluate((button) => {
+          button.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, applyButton)
+        
+        await humanSleep(1000, 'Ensuring button is in view', this.logger)
+        
+        // Try clicking with different approaches
+        try {
+          await applyButton.click()
+          this.logger.success('Application submit button clicked successfully')
+        } catch {
+          // If regular click fails, try clicking at coordinates
+          this.logger.warning('Regular click failed, trying coordinate click')
+          const boundingBox = await applyButton.boundingBox()
+          if (boundingBox) {
+            await this.page.mouse.click(
+              boundingBox.x + boundingBox.width / 2,
+              boundingBox.y + boundingBox.height / 2
+            )
+            this.logger.success('Application submit button clicked via coordinates')
+          } else {
+            throw new Error('Could not get button coordinates for clicking')
+          }
+        }
+      } catch (buttonClickError) {
+        this.logger.error('Failed to click apply button', { error: buttonClickError })
+        throw buttonClickError
+      }
 
       // Wait for confirmation or redirect
       try {
-        await this.page.waitForSelector(
-          '.success, .confirmation, [class*="success"], [class*="confirm"]', 
-          { timeout: 10000 }
-        )
+        // Wait for various success indicators
+        await Promise.race([
+          this.page.waitForSelector('.success, .confirmation, [class*="success"], [class*="confirm"]', { timeout: 10000 }),
+          this.page.waitForSelector('[data-turbo-frame*="otp"], turbo-frame[id*="otp"]', { timeout: 10000 }),
+          this.page.waitForFunction(() => 
+            document.body.textContent?.includes('candidature') || 
+            document.body.textContent?.includes('envoyé') ||
+            document.body.textContent?.includes('merci')
+          , {}, { timeout: 10000 })
+        ])
         this.logger.success('Application confirmation detected')
-      } catch (error) {
-        // Check if we were redirected to a success page
+      } catch {
+        // Check if we were redirected to a success page or got a different response
         const currentUrl = this.page.url()
-        if (currentUrl.includes('success') || currentUrl.includes('confirmation')) {
+        const pageText = await this.page.evaluate(() => document.body.textContent?.toLowerCase() || '')
+        
+        if (currentUrl.includes('success') || currentUrl.includes('confirmation') || currentUrl.includes('candidature')) {
           this.logger.success('Redirected to confirmation page')
+        } else if (pageText.includes('candidature') || pageText.includes('envoyé') || pageText.includes('merci')) {
+          this.logger.success('Confirmation text detected on page')
         } else {
-          this.logger.warning('No confirmation detected, but application may have been sent')
+          this.logger.warning('No clear confirmation detected, but application may have been sent')
+          this.logger.debug('Current URL', { url: currentUrl })
         }
       }
 
       // Take final screenshot
-      await this.takeScreenshot('09-application-completed')
+      await this.takeScreenshot('10-application-completed')
 
       const applicationId = `app_${Date.now()}_${Math.random().toString(36).substring(7)}`
       
