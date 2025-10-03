@@ -1,4 +1,4 @@
-import { db } from '@/lib/database'
+import { db, query } from '@/lib/database'
 import { JobBoardFactory, ApplicationTemplateEngine } from '@/lib/job-board-automation'
 import type { SearchCriteria, ApplicationData, JobListing, AutoApplicationResult } from '@/lib/job-board-automation'
 
@@ -64,15 +64,24 @@ export async function runAutoApplyAutomation(configId: string, useRealAutomation
     const job = jobs[i]
     
     try {
-      // Check if we already applied to this job to prevent duplicates
-      const existingApplication = await db.getApplicationLogs(config.id)
-      const alreadyApplied = existingApplication.some((log) => 
-        log.jobId === job.id || log.jobId === job.url
+      // Check if we already applied to this job by checking if job exists in database
+      // with same source and sourceId
+      const existingJob = await query(
+        'SELECT id FROM job WHERE source = ? AND sourceId = ?',
+        [config.boardName, job.id]
       )
 
-      if (alreadyApplied) {
-        console.log(`⚠️ Skipping job "${job.title}" - already applied`)
-        continue
+      if (existingJob.length > 0) {
+        // Check if we have an application for this job
+        const existingApp = await query(
+          'SELECT id FROM application WHERE jobId = ? AND userId = ?',
+          [existingJob[0].id, config.userId]
+        )
+        
+        if (existingApp.length > 0) {
+          console.log(`⚠️ Skipping job "${job.title}" - already applied (found in database)`)
+          continue
+        }
       }
 
       // Process template for this specific job (if using custom template)
@@ -105,16 +114,75 @@ export async function runAutoApplyAutomation(configId: string, useRealAutomation
         console.log(`❌ Failed to apply to: ${job.title} - ${appResult.message}`)
       }
 
-      // Log application attempt to database
-      await db.logApplication({
-        jobId: job.url, // Use URL as unique identifier
+      // Create or update job record in the database
+      const jobId = await db.createOrUpdateJob({
+        source: config.boardName,
+        sourceId: job.id,
+        title: job.title,
+        company: job.company,
+        locations: job.location ? [job.location] : [],
+        remote: job.location?.toLowerCase().includes('remote') || false,
+        url: job.url,
+        description: job.description || '',
+        salaryMin: typeof job.salary === 'object' ? job.salary?.min : undefined,
+        salaryMax: typeof job.salary === 'object' ? job.salary?.max : undefined,
+        currency: typeof job.salary === 'object' ? job.salary?.currency : undefined,
+        tags: [],
+        postedAt: job.postedDate
+      })
+
+      // Create application record in the main application table
+      if (appResult.success) {
+        const appParams: {
+          jobId: string
+          userId: string
+          status: 'APPLIED'
+          channel: 'FORM'
+          coverText?: string
+          notes: string
+          resumePath?: string
+          contactEmail?: string
+        } = {
+          jobId: jobId,
+          userId: config.userId,
+          status: 'APPLIED',
+          channel: 'FORM',
+          notes: `Auto-applied via ${config.boardName}`
+        }
+        
+        if (processedCoverLetter) {
+          appParams.coverText = processedCoverLetter
+        }
+        
+        await db.createApplication(appParams)
+      }
+
+      // Log application attempt to application_log table (for automation tracking)
+      const logParams: {
+        jobId: string
+        jobBoardConfigId: string
+        status: 'applied' | 'failed'
+        appliedAt?: Date
+        response: string
+        followUpRequired: boolean
+        notes?: string
+      } = {
+        jobId: job.url,
         jobBoardConfigId: config.id,
         status: appResult.success ? 'applied' : 'failed',
-        appliedAt: appResult.success ? new Date() : undefined,
         response: appResult.message,
-        followUpRequired: false,
-        notes: appResult.error || undefined
-      })
+        followUpRequired: false
+      }
+      
+      if (appResult.success) {
+        logParams.appliedAt = new Date()
+      }
+      
+      if (appResult.error) {
+        logParams.notes = appResult.error
+      }
+      
+      await db.logApplication(logParams)
 
       // Add random delay between 5-8 seconds before processing next job
       const delayMs = Math.floor(Math.random() * 3000) + 5000 // Random between 5000-8000ms

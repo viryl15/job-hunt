@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { 
   Search, 
   MapPin, 
@@ -18,7 +19,7 @@ import {
   Users,
   Settings,
   Zap,
-  Home
+  ListChecks
 } from 'lucide-react'
 import Link from 'next/link'
 import { JobSourceSelector } from '@/components/JobSourceSelector'
@@ -93,8 +94,13 @@ export default function Dashboard() {
       const response = await fetch('/api/applied-jobs')
       const data = await response.json()
       
+      console.log('Applied jobs API response:', data)
+      
       if (data.success) {
         setAppliedJobsData(data.data)
+        console.log('Applications count:', data.data?.applications?.length || 0)
+      } else {
+        console.error('API returned error:', data.error)
       }
     } catch (error) {
       console.error('Error fetching applied jobs:', error)
@@ -224,41 +230,56 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{loadingApplications ? '...' : appliedJobsData?.statistics?.total || 0}</div>
-              <p className="text-xs text-muted-foreground">Applications sent</p>
+              <p className="text-xs text-muted-foreground">Total applications</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
+              <CardTitle className="text-sm font-medium">Interviews</CardTitle>
               <Star className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{loadingApplications ? '...' : appliedJobsData?.statistics?.successRate || 0}%</div>
-              <p className="text-xs text-muted-foreground">Successful applications</p>
+              <div className="text-2xl font-bold">{loadingApplications ? '...' : appliedJobsData?.statistics?.interview || 0}</div>
+              <p className="text-xs text-muted-foreground">In interview process</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avg Score</CardTitle>
+              <CardTitle className="text-sm font-medium">Offers</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">67</div>
-              <p className="text-xs text-muted-foreground">Match quality</p>
+              <div className="text-2xl font-bold">{loadingApplications ? '...' : (appliedJobsData?.statistics?.offer || 0) + (appliedJobsData?.statistics?.hired || 0)}</div>
+              <p className="text-xs text-muted-foreground">Offers & hired</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Search and Filters */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Job Search</CardTitle>
-            <CardDescription>
-              Find your perfect job match from {totalJobs} available positions
-            </CardDescription>
-          </CardHeader>
+        {/* Main Content with Tabs */}
+        <Tabs defaultValue="search" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsTrigger value="search" className="flex items-center gap-2">
+              <Search className="h-4 w-4" />
+              Job Search
+            </TabsTrigger>
+            <TabsTrigger value="applications" className="flex items-center gap-2">
+              <ListChecks className="h-4 w-4" />
+              My Applications ({appliedJobsData?.statistics?.total || 0})
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Job Search Tab */}
+          <TabsContent value="search">
+            {/* Search and Filters */}
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Job Search</CardTitle>
+                <CardDescription>
+                  Find your perfect job match from {totalJobs} available positions
+                </CardDescription>
+              </CardHeader>
           <CardContent>
             <div className="flex flex-col sm:flex-row gap-4 mb-4">
               <div className="flex-1">
@@ -398,31 +419,99 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Applied Jobs Section */}
-        {appliedJobsData && appliedJobsData.applications.length > 0 && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Applied Jobs</CardTitle>
-              <CardDescription>
-                View your job applications and their status
-              </CardDescription>
-            </CardHeader>
+        {/* Pagination */}
+        {!loading && jobs.length > 0 && (
+          <div className="flex justify-center gap-2 mt-6">
+            <Button 
+              variant="outline" 
+              size="sm"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(currentPage - 1)}
+            >
+              Previous
+            </Button>
+            <Button variant="outline" size="sm">
+              Page {currentPage}
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => setCurrentPage(currentPage + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+          </TabsContent>
+
+          {/* My Applications Tab */}
+          <TabsContent value="applications">
+            {loadingApplications ? (
+              <div className="text-center py-12">
+                <p className="text-gray-500">Loading applications...</p>
+              </div>
+            ) : appliedJobsData && appliedJobsData.applications && appliedJobsData.applications.length > 0 ? (
+              <div className="space-y-6">
+                {/* Application Statistics */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {appliedJobsData.statistics.applied}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Applied</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="text-2xl font-bold text-yellow-600">
+                        {appliedJobsData.statistics.screening}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Screening</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="text-2xl font-bold text-purple-600">
+                        {appliedJobsData.statistics.interview}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Interviews</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="text-2xl font-bold text-green-600">
+                        {appliedJobsData.statistics.offer + appliedJobsData.statistics.hired}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Offers/Hired</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Applications List */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>All Applications</CardTitle>
+                    <CardDescription>
+                      Track the status of your {appliedJobsData.applications.length} job applications
+                    </CardDescription>
+                  </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {appliedJobsData.applications.slice(0, 10).map((application: any) => (
                   <div key={application.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex-1">
-                      <h3 className="font-semibold text-lg">{application.jobTitle || 'Job Title Unavailable'}</h3>
+                      <h3 className="font-semibold text-lg">{application.title || 'Job Title Unavailable'}</h3>
                       <p className="text-gray-600">{application.company || 'Company Name Unavailable'}</p>
                       <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                         <span className="flex items-center gap-1">
                           <Calendar className="h-4 w-4" />
-                          {new Date(application.appliedAt).toLocaleDateString()}
+                          {new Date(application.createdAt).toLocaleDateString()}
                         </span>
                         {application.locations && application.locations.length > 0 && (
                           <span className="flex items-center gap-1">
                             <MapPin className="h-4 w-4" />
-                            {JSON.parse(application.locations)[0]}
+                            {application.locations[0]}
                           </span>
                         )}
                         {application.salaryMin && application.salaryMax && (
@@ -434,14 +523,22 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Badge variant={application.status === 'applied' ? 'default' : 'destructive'}>
-                        {application.status === 'applied' ? 'Applied' : 'Failed'}
+                      <Badge variant={
+                        application.status === 'HIRED' ? 'default' : 
+                        application.status === 'OFFER' ? 'default' :
+                        application.status === 'TECH' || application.status === 'ONSITE' ? 'secondary' :
+                        application.status === 'SCREEN' ? 'secondary' :
+                        application.status === 'APPLIED' ? 'outline' :
+                        application.status === 'REJECTED' ? 'destructive' : 
+                        'outline'
+                      }>
+                        {application.status}
                       </Badge>
-                      {application.jobUrl && (
+                      {application.url && (
                         <Button 
                           variant="ghost" 
                           size="sm"
-                          onClick={() => window.open(application.jobUrl, '_blank', 'noopener noreferrer')}
+                          onClick={() => window.open(application.url, '_blank', 'noopener noreferrer')}
                         >
                           <ExternalLink className="h-4 w-4 mr-1" />
                           View Job
@@ -460,33 +557,30 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-        )}
+              </div>
 
-        {/* Pagination */}
-        {!loading && jobs.length > 0 && (
-          <div className="flex justify-center mt-8">
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                size="sm"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(currentPage - 1)}
-              >
-                Previous
-              </Button>
-              <Button variant="outline" size="sm">
-                Page {currentPage}
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setCurrentPage(currentPage + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        )}
+            ) : (
+              <Card>
+                <CardContent className="py-12">
+                  <div className="text-center">
+                    <ListChecks className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No applications yet</h3>
+                    <p className="text-gray-500 mb-4">
+                      Start applying to jobs to track your application progress here.
+                    </p>
+                    <Link href="/auto-apply">
+                      <Button>
+                        <Zap className="h-4 w-4 mr-2" />
+                        Start Auto Apply
+                      </Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
+
       </div>
     </div>
   )

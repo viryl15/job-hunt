@@ -378,6 +378,150 @@ export const db = {
       followUpRequired: Boolean(log.followUpRequired),
       appliedAt: log.appliedAt || log.createdAt
     }))
+  },
+
+  // Job operations
+  async createOrUpdateJob(jobData: {
+    id?: string
+    source: string
+    sourceId?: string
+    title: string
+    company: string
+    locations: string[]
+    remote?: boolean
+    url: string
+    description?: string
+    salaryMin?: number
+    salaryMax?: number
+    currency?: string
+    tags?: string[]
+    postedAt?: Date
+  }): Promise<string> {
+    const id = jobData.id || generateId()
+    
+    // Check if job with this URL already exists
+    const existing = await query('SELECT id FROM job WHERE url = ?', [jobData.url])
+    
+    if (existing.length > 0) {
+      // Update existing job
+      await query(`
+        UPDATE job SET
+          title = ?,
+          company = ?,
+          locations = ?,
+          remote = ?,
+          description = ?,
+          salaryMin = ?,
+          salaryMax = ?,
+          currency = ?,
+          tags = ?,
+          postedAt = ?,
+          updatedAt = NOW()
+        WHERE url = ?
+      `, [
+        jobData.title,
+        jobData.company,
+        JSON.stringify(jobData.locations),
+        jobData.remote ? 1 : 0,
+        jobData.description || null,
+        jobData.salaryMin || null,
+        jobData.salaryMax || null,
+        jobData.currency || null,
+        JSON.stringify(jobData.tags || []),
+        jobData.postedAt || null,
+        jobData.url
+      ])
+      return existing[0].id
+    } else {
+      // Create new job
+      await query(`
+        INSERT INTO job (
+          id, source, sourceId, title, company, locations, remote, url,
+          description, salaryMin, salaryMax, currency, tags, postedAt,
+          createdAt, updatedAt, score, hidden
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), 0, 0)
+      `, [
+        id,
+        jobData.source,
+        jobData.sourceId || null,
+        jobData.title,
+        jobData.company,
+        JSON.stringify(jobData.locations),
+        jobData.remote ? 1 : 0,
+        jobData.url,
+        jobData.description || null,
+        jobData.salaryMin || null,
+        jobData.salaryMax || null,
+        jobData.currency || null,
+        JSON.stringify(jobData.tags || []),
+        jobData.postedAt || null
+      ])
+      return id
+    }
+  },
+
+  // Application operations (using the main `application` table)
+  async createApplication(appData: {
+    jobId: string
+    userId: string
+    status?: 'LEAD' | 'APPLIED' | 'SCREEN' | 'TECH' | 'ONSITE' | 'OFFER' | 'HIRED' | 'REJECTED'
+    channel?: 'EMAIL' | 'FORM' | 'REFERRAL'
+    resumePath?: string
+    coverText?: string
+    notes?: string
+    contactEmail?: string
+  }): Promise<string> {
+    const id = generateId()
+    
+    await query(`
+      INSERT INTO application (
+        id, jobId, userId, status, channel, resumePath, coverText,
+        notes, contactEmail, createdAt, updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    `, [
+      id,
+      appData.jobId,
+      appData.userId,
+      appData.status || 'APPLIED',
+      appData.channel || 'FORM',
+      appData.resumePath || null,
+      appData.coverText || null,
+      appData.notes || null,
+      appData.contactEmail || null
+    ])
+    
+    return id
+  },
+
+  async getUserApplicationsFromMainTable(userId: string): Promise<Application[]> {
+    const sql = `
+      SELECT 
+        a.*,
+        j.title,
+        j.company,
+        j.url,
+        j.locations,
+        j.salaryMin,
+        j.salaryMax,
+        j.currency,
+        j.description,
+        j.remote,
+        j.tags,
+        j.postedAt
+      FROM application a
+      INNER JOIN job j ON a.jobId = j.id
+      WHERE a.userId = ?
+      ORDER BY a.createdAt DESC
+    `
+    const apps = await query<any>(sql, [userId])
+    
+    // MySQL2 automatically parses JSON columns to JavaScript objects
+    return apps.map((app) => ({
+      ...app,
+      locations: Array.isArray(app.locations) ? app.locations : [],
+      tags: Array.isArray(app.tags) ? app.tags : [],
+      remote: Boolean(app.remote)
+    }))
   }
 }
 
@@ -440,6 +584,35 @@ export interface ApplicationLog {
   followUpDate?: Date
   notes?: string
   createdAt: Date
+}
+
+export interface Application {
+  id: string
+  jobId: string
+  userId: string
+  status: 'LEAD' | 'APPLIED' | 'SCREEN' | 'TECH' | 'ONSITE' | 'OFFER' | 'HIRED' | 'REJECTED'
+  channel: 'EMAIL' | 'FORM' | 'REFERRAL'
+  resumePath?: string
+  coverText?: string
+  emailId?: string
+  threadId?: string
+  notes?: string
+  createdAt: Date
+  updatedAt: Date
+  followupAt?: Date
+  contactEmail?: string
+  // Joined job data
+  title?: string
+  company?: string
+  url?: string
+  locations?: string[]
+  salaryMin?: number
+  salaryMax?: number
+  currency?: string
+  description?: string
+  remote?: boolean
+  tags?: string[]
+  postedAt?: Date
 }
 
 // Simple ID generator
