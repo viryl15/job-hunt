@@ -23,8 +23,76 @@ export async function query<T = any>(sql: string, params: any[] = []): Promise<T
   return rows as T[]
 }
 
-// Simple database operations for jobs
+// User management
 export const db = {
+  // User operations
+  async createUser(userData: {
+    id: string
+    email: string
+    name?: string
+    image?: string
+    provider: string
+    providerId: string
+  }) {
+    await query(`
+      INSERT INTO users (
+        id, email, name, image, provider, providerId, createdAt, updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+    `, [
+      userData.id,
+      userData.email,
+      userData.name || null,
+      userData.image || null,
+      userData.provider,
+      userData.providerId
+    ])
+    return userData.id
+  },
+
+  async getUserByEmail(email: string) {
+    const users = await query(`
+      SELECT * FROM users WHERE email = ? LIMIT 1
+    `, [email])
+    return users[0] || null
+  },
+
+  async getUserById(id: string) {
+    const users = await query(`
+      SELECT * FROM users WHERE id = ? LIMIT 1
+    `, [id])
+    return users[0] || null
+  },
+
+  async updateUser(id: string, updates: {
+    name?: string
+    image?: string
+    lastLoginAt?: Date
+  }) {
+    const setClause = []
+    const params: any[] = []
+    
+    if (updates.name !== undefined) {
+      setClause.push('name = ?')
+      params.push(updates.name)
+    }
+    if (updates.image !== undefined) {
+      setClause.push('image = ?')
+      params.push(updates.image)
+    }
+    if (updates.lastLoginAt !== undefined) {
+      setClause.push('lastLoginAt = ?')
+      params.push(updates.lastLoginAt)
+    }
+    
+    setClause.push('updatedAt = NOW()')
+    params.push(id)
+    
+    await query(`
+      UPDATE users SET ${setClause.join(', ')} WHERE id = ?
+    `, params)
+  },
+
+  // Job operations
   async createJob(jobData: {
     source: string
     sourceId?: string
@@ -290,6 +358,19 @@ export const db = {
       followUpRequired: Boolean(log.followUpRequired)
     }))
   }
+}
+
+// User management interfaces
+export interface User {
+  id: string
+  email: string
+  name?: string
+  image?: string
+  provider: string
+  providerId: string
+  lastLoginAt?: Date
+  createdAt: Date
+  updatedAt: Date
 }
 
 // Job board configuration for automated applications

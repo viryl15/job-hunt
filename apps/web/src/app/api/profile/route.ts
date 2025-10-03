@@ -1,46 +1,114 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/database'
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions)
+    
+    if (!session || !session.user) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Not authenticated' 
+      }, { status: 401 })
+    }
+
     const profileData = await request.json()
     
-    // Update the existing JobBoardConfig with profile data
-    const configId = profileData.configId || 'config_1'
+    // Get user from database
+    const user = await db.getUserByEmail(session.user.email!)
+    if (!user) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'User not found. Please try signing in again.' 
+      }, { status: 404 })
+    }
     
-    // Get existing config
+    // Get user's job board config (create one if it doesn't exist)
+    const configId = `config_${user.id}`
+    
+    // Get existing config or create default
     let existingConfig
     try {
       existingConfig = await db.getJobBoardConfig(configId)
+      
+      if (!existingConfig) {
+        // Create a default config for the user
+        existingConfig = {
+          id: configId,
+          userId: user.id,
+          boardName: 'hellowork',
+          boardUrl: 'https://www.hellowork.com',
+          credentials: {
+            username: user.name || 'User',
+            email: user.email
+          },
+          preferences: {
+            skills: [],
+            locations: ['France'],
+            experienceLevel: '3 ans',
+            jobTypes: ['CDI'],
+            remotePreference: 'flexible' as const,
+            salaryMin: 40000,
+            salaryMax: 80000
+          },
+          applicationSettings: {
+            autoApply: false,
+            maxApplicationsPerDay: 5,
+            coverLetterTemplate: `Madame, Monsieur,
+
+Je vous écris pour exprimer mon intérêt pour le poste de {{JOB_TITLE}} au sein de {{COMPANY_NAME}}.
+
+Avec {{USER_EXPERIENCE}} d'expérience dans le développement logiciel et une expertise en {{SKILLS}}, je suis convaincu de pouvoir contribuer efficacement à vos projets.
+
+Mes compétences techniques et ma passion pour l'innovation font de moi un candidat idéal pour rejoindre votre équipe.
+
+Je serais ravi de discuter de ma candidature lors d'un entretien.
+
+Cordialement,
+{{USER_NAME}}`,
+            resumeUrl: '',
+            customMessage: ''
+          },
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      }
     } catch (dbError) {
-      console.error('Database error, creating fallback config:', dbError)
-      // Create a fallback config if database is not available
+      console.error('Database error, using fallback config:', dbError)
       existingConfig = {
         id: configId,
-        userId: 'user_1',
+        userId: user.id,
         boardName: 'hellowork',
         boardUrl: 'https://www.hellowork.com',
         credentials: {
-          username: 'Jean Dupont',
-          email: 'jean.dupont@example.com'
+          username: user.name || 'User',
+          email: user.email
         },
         preferences: {
-          skills: ['JavaScript', 'React'],
-          locations: ['Paris'],
+          skills: [],
+          locations: ['France'],
           experienceLevel: '3 ans',
           jobTypes: ['CDI'],
-          remotePreference: 'flexible' as const
+          remotePreference: 'flexible' as const,
+          salaryMin: 40000,
+          salaryMax: 80000
         },
         applicationSettings: {
-          autoApply: true,
-          maxApplicationsPerDay: 10,
-          coverLetterTemplate: 'Template par défaut'
+          autoApply: false,
+          maxApplicationsPerDay: 5,
+          coverLetterTemplate: 'Template par défaut',
+          resumeUrl: '',
+          customMessage: ''
         },
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date()
       }
     }
+    
     if (!existingConfig) {
       return NextResponse.json({ 
         success: false, 
@@ -53,7 +121,7 @@ export async function POST(request: NextRequest) {
       ...existingConfig,
       credentials: {
         ...existingConfig.credentials,
-        username: `${profileData.personalInfo?.firstName} ${profileData.personalInfo?.lastName}`.trim() || existingConfig.credentials.username,
+        username: `${profileData.personalInfo?.firstName || ''} ${profileData.personalInfo?.lastName || ''}`.trim() || existingConfig.credentials.username,
         email: profileData.personalInfo?.email || existingConfig.credentials.email
       },
       preferences: {
@@ -81,8 +149,7 @@ export async function POST(request: NextRequest) {
       await db.saveJobBoardConfig(updatedConfig)
       console.log('✅ Profile saved to database')
     } catch (dbError) {
-      console.warn('⚠️ Could not save to database, using in-memory storage:', dbError)
-      // Fallback to in-memory storage if database fails
+      console.warn('⚠️ Could not save to database:', dbError)
     }
     
     return NextResponse.json({
@@ -95,48 +162,70 @@ export async function POST(request: NextRequest) {
     console.error('Profile update error:', error)
     return NextResponse.json({ 
       success: false, 
-      error: 'Failed to update profile' 
+      error: 'Failed to update profile: ' + (error as Error).message 
     }, { status: 500 })
   }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const configId = searchParams.get('configId') || 'config_1'
+    const session = await getServerSession(authOptions)
+    
+    if (!session || !session.user) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Not authenticated' 
+      }, { status: 401 })
+    }
+
+    // Get user from database
+    const user = await db.getUserByEmail(session.user.email!)
+    if (!user) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'User not found' 
+      }, { status: 404 })
+    }
+    
+    const configId = `config_${user.id}`
     
     let config
     try {
       config = await db.getJobBoardConfig(configId)
     } catch (dbError) {
       console.error('Database error in GET, using fallback:', dbError)
-      // Fallback config
+      // Fallback config with user's real data
       config = {
         id: configId,
-        userId: 'user_1',
+        userId: user.id,
         boardName: 'hellowork',
         boardUrl: 'https://www.hellowork.com',
         credentials: {
-          username: 'Jean Dupont',
-          email: 'jean.dupont@example.com'
+          username: user.name || 'User',
+          email: user.email
         },
         preferences: {
-          skills: ['JavaScript', 'React', 'Node.js'],
-          locations: ['Paris', 'Remote'],
+          skills: [],
+          locations: ['France'],
           experienceLevel: '3 ans',
           jobTypes: ['CDI'],
-          remotePreference: 'flexible' as const
+          remotePreference: 'flexible' as const,
+          salaryMin: 40000,
+          salaryMax: 80000
         },
         applicationSettings: {
-          autoApply: true,
-          maxApplicationsPerDay: 10,
-          coverLetterTemplate: 'Template par défaut'
+          autoApply: false,
+          maxApplicationsPerDay: 5,
+          coverLetterTemplate: 'Template par défaut',
+          resumeUrl: '',
+          customMessage: ''
         },
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date()
       }
     }
+    
     if (!config) {
       return NextResponse.json({ 
         success: false, 
@@ -147,9 +236,10 @@ export async function GET(request: NextRequest) {
     // Convert config to user profile format
     const userProfile = {
       personalInfo: {
-        firstName: config.credentials.username?.split(' ')[0] || '',
-        lastName: config.credentials.username?.split(' ').slice(1).join(' ') || '',
-        email: config.credentials.email || '',
+        firstName: config.credentials.username?.split(' ')[0] || user.name?.split(' ')[0] || '',
+        lastName: config.credentials.username?.split(' ').slice(1).join(' ') || user.name?.split(' ').slice(1).join(' ') || '',
+        email: config.credentials.email || user.email,
+        phone: '',
         city: config.preferences.locations?.[0] || '',
         country: 'France'
       },
@@ -168,8 +258,8 @@ export async function GET(request: NextRequest) {
         desiredTitles: [],
         preferredLocations: config.preferences.locations || [],
         salaryRange: {
-          min: config.preferences.salaryMin,
-          max: config.preferences.salaryMax,
+          min: config.preferences.salaryMin || 40000,
+          max: config.preferences.salaryMax || 80000,
           currency: 'EUR'
         },
         jobTypes: config.preferences.jobTypes || ['CDI'],
@@ -177,13 +267,14 @@ export async function GET(request: NextRequest) {
         willingToRelocate: false
       },
       documents: {
-        coverLetterTemplate: config.applicationSettings.coverLetterTemplate,
-        resumeUrl: config.applicationSettings.resumeUrl
+        coverLetterTemplate: config.applicationSettings.coverLetterTemplate || '',
+        resumeUrl: config.applicationSettings.resumeUrl || '',
+        portfolioUrl: ''
       },
       automation: {
-        autoApplyEnabled: config.applicationSettings.autoApply,
-        maxApplicationsPerDay: config.applicationSettings.maxApplicationsPerDay,
-        customMotivationMessage: config.applicationSettings.customMessage,
+        autoApplyEnabled: config.applicationSettings.autoApply || false,
+        maxApplicationsPerDay: config.applicationSettings.maxApplicationsPerDay || 5,
+        customMotivationMessage: config.applicationSettings.customMessage || '',
         skipCompanies: []
       }
     }
@@ -198,7 +289,7 @@ export async function GET(request: NextRequest) {
     console.error('Profile fetch error:', error)
     return NextResponse.json({ 
       success: false, 
-      error: 'Failed to fetch profile' 
+      error: 'Failed to fetch profile: ' + (error as Error).message 
     }, { status: 500 })
   }
 }
