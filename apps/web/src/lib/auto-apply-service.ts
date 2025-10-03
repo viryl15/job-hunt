@@ -116,6 +116,11 @@ export async function runAutoApplyAutomation(configId: string, useRealAutomation
         notes: appResult.error || undefined
       })
 
+      // Add random delay between 5-8 seconds before processing next job
+      const delayMs = Math.floor(Math.random() * 3000) + 5000 // Random between 5000-8000ms
+      console.log(`Waiting ${(delayMs / 1000).toFixed(1)} seconds before next application...`)
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+
     } catch (error) {
       console.error(`Error applying to job ${job.title}:`, error)
       const failedResult: AutoApplicationResult = {
