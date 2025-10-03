@@ -21,6 +21,32 @@ export abstract class JobBoardAutomator {
   abstract searchJobs(criteria: SearchCriteria): Promise<JobListing[]>
   abstract applyToJob(jobId: string, application: ApplicationData): Promise<AutoApplicationResult>
   abstract logout(): Promise<void>
+  
+  // Default implementation for integrated search and apply (can be overridden)
+  async searchAndApplyToJobs(criteria: SearchCriteria, application: ApplicationData): Promise<{
+    searchResults: JobListing[]
+    applications: AutoApplicationResult[]
+  }> {
+    // Default implementation - just search then apply to each
+    const jobs = await this.searchJobs(criteria)
+    const applications: AutoApplicationResult[] = []
+    
+    for (const job of jobs) {
+      try {
+        const result = await this.applyToJob(job.id, application)
+        applications.push(result)
+      } catch (error) {
+        applications.push({
+          success: false,
+          jobId: job.id,
+          message: 'Application failed',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        })
+      }
+    }
+    
+    return { searchResults: jobs, applications }
+  }
 }
 
 export interface SearchCriteria {

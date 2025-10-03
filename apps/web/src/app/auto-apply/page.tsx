@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSession } from 'next-auth/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,6 +10,7 @@ import { JobBoardConfig } from '@/lib/database'
 import { Plus, Settings, Play, Pause, Eye, Trash2 } from 'lucide-react'
 
 export default function AutoApplyPage() {
+  const { data: session, status } = useSession()
   const [configs, setConfigs] = useState<JobBoardConfig[]>([])
   const [showConfigForm, setShowConfigForm] = useState(false)
   const [editingConfig, setEditingConfig] = useState<JobBoardConfig | undefined>()
@@ -16,12 +18,14 @@ export default function AutoApplyPage() {
   const [runningJobs, setRunningJobs] = useState<Set<string>>(new Set())
   const [useRealAutomation, setUseRealAutomation] = useState(false)
 
-  // Mock user ID - in a real app this would come from authentication
-  const userId = 'user_123'
+  // Get user ID from authenticated session
+  const userId = session?.user?.id
 
   useEffect(() => {
-    loadConfigs()
-  }, [])
+    if (status === 'authenticated' && userId) {
+      loadConfigs()
+    }
+  }, [status, userId])
 
   const loadConfigs = async () => {
     try {
@@ -147,6 +151,34 @@ export default function AutoApplyPage() {
             setEditingConfig(undefined)
           }}
         />
+      </div>
+    )
+  }
+
+  // Show loading state while checking authentication
+  if (status === 'loading') {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show message if not authenticated
+  if (status === 'unauthenticated' || !userId) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="text-center py-12">
+          <h2 className="text-2xl font-bold mb-4">Authentication Required</h2>
+          <p className="text-muted-foreground mb-4">
+            Please sign in to access job automation features.
+          </p>
+          <Button onClick={() => window.location.href = '/api/auth/signin'}>
+            Sign In
+          </Button>
+        </div>
       </div>
     )
   }

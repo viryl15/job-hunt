@@ -56,6 +56,7 @@ export function JobBoardConfigForm({ config, onSave, onCancel }: JobBoardConfigF
       autoApply: config?.applicationSettings?.autoApply || false,
       maxApplicationsPerDay: config?.applicationSettings?.maxApplicationsPerDay || 5,
       coverLetterTemplate: config?.applicationSettings?.coverLetterTemplate || getDefaultCoverLetterTemplate(),
+      useCustomTemplate: config?.applicationSettings?.useCustomTemplate !== undefined ? config.applicationSettings.useCustomTemplate : true,
       resumeUrl: config?.applicationSettings?.resumeUrl || '',
       customMessage: config?.applicationSettings?.customMessage || ''
     },
@@ -318,7 +319,7 @@ export function JobBoardConfigForm({ config, onSave, onCancel }: JobBoardConfigF
                   id="maxApplications"
                   type="number"
                   min="1"
-                  max="20"
+                  max="200"
                   value={formData.applicationSettings.maxApplicationsPerDay}
                   onChange={(e) => setFormData(prev => ({
                     ...prev,
@@ -371,32 +372,56 @@ export function JobBoardConfigForm({ config, onSave, onCancel }: JobBoardConfigF
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="coverLetterTemplate">Template</Label>
-                <Textarea
-                  id="coverLetterTemplate"
-                  value={formData.applicationSettings.coverLetterTemplate}
-                  onChange={(e) => setFormData(prev => ({
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <Label htmlFor="useCustomTemplate" className="text-base font-medium">
+                    Use Custom Cover Letter Template
+                  </Label>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Enable this to include your custom cover letter with job applications. 
+                    Disable to apply with just the pre-filled form (HelloWork doesn&apos;t require a motivation message).
+                  </p>
+                </div>
+                <Switch
+                  id="useCustomTemplate"
+                  checked={formData.applicationSettings.useCustomTemplate}
+                  onCheckedChange={(checked) => setFormData(prev => ({
                     ...prev,
-                    applicationSettings: { ...prev.applicationSettings, coverLetterTemplate: e.target.value }
+                    applicationSettings: { ...prev.applicationSettings, useCustomTemplate: checked }
                   }))}
-                  rows={12}
-                  className="font-mono"
                 />
               </div>
-              
-              <div className="bg-muted p-4 rounded-lg">
-                <h4 className="font-semibold mb-2">Available Placeholders:</h4>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <code>{'{{COMPANY_NAME}}'}</code>
-                  <code>{'{{JOB_TITLE}}'}</code>
-                  <code>{'{{USER_NAME}}'}</code>
-                  <code>{'{{USER_EXPERIENCE}}'}</code>
-                  <code>{'{{SKILLS}}'}</code>
-                  <code>{'{{LOCATION}}'}</code>
-                  <code>{'{{DATE}}'}</code>
+
+              {formData.applicationSettings.useCustomTemplate && (
+                <div>
+                  <Label htmlFor="coverLetterTemplate">Template</Label>
+                  <Textarea
+                    id="coverLetterTemplate"
+                    value={formData.applicationSettings.coverLetterTemplate}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      applicationSettings: { ...prev.applicationSettings, coverLetterTemplate: e.target.value }
+                    }))}
+                    rows={12}
+                    className="font-mono"
+                  />
                 </div>
-              </div>
+              )}
+              
+              {formData.applicationSettings.useCustomTemplate && (
+                <div className="bg-muted p-4 rounded-lg">
+                  <h4 className="font-semibold mb-2">Available Placeholders:</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <code>{'{{COMPANY_NAME}}'}</code>
+                    <code>{'{{JOB_TITLE}}'}</code>
+                    <code>{'{{USER_NAME}}'}</code>
+                    <code>{'{{USER_EXPERIENCE}}'}</code>
+                    <code>{'{{SKILLS}}'}</code>
+                    <code>{'{{LOCATION}}'}</code>
+                    <code>{'{{DATE}}'}</code>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

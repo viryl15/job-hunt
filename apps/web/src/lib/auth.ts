@@ -1,5 +1,6 @@
 import { NextAuthOptions } from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
+import { db } from './database'
 
 export const authOptions: NextAuthOptions = {
   // Using JWT strategy without database adapter
@@ -25,9 +26,15 @@ export const authOptions: NextAuthOptions = {
         token.accessToken = account.access_token
         token.refreshToken = account.refresh_token
       }
-      if (user) {
-        token.id = user.id
+      
+      // Get the database user ID by email
+      if (user?.email) {
+        const dbUser = await db.getUserByEmail(user.email)
+        if (dbUser) {
+          token.id = dbUser.id // Use database user ID, not provider ID
+        }
       }
+      
       return token
     },
     async session({ session, token }) {
@@ -35,7 +42,7 @@ export const authOptions: NextAuthOptions = {
       if (token && session.user) {
         session.accessToken = token.accessToken as string
         session.refreshToken = token.refreshToken as string
-        session.user.id = token.id as string
+        session.user.id = token.id as string // This will be the database user ID
       }
       return session
     },

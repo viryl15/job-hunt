@@ -66,6 +66,7 @@ export const db = {
   async updateUser(id: string, updates: {
     name?: string
     image?: string
+    phone?: string
     lastLoginAt?: Date
   }) {
     const setClause = []
@@ -78,6 +79,10 @@ export const db = {
     if (updates.image !== undefined) {
       setClause.push('image = ?')
       params.push(updates.image)
+    }
+    if (updates.phone !== undefined) {
+      setClause.push('phone = ?')
+      params.push(updates.phone)
     }
     if (updates.lastLoginAt !== undefined) {
       setClause.push('lastLoginAt = ?')
@@ -357,6 +362,22 @@ export const db = {
       ...log,
       followUpRequired: Boolean(log.followUpRequired)
     }))
+  },
+
+  async getUserApplications(userId: string): Promise<ApplicationLog[]> {
+    const sql = `
+      SELECT al.*, j.title as jobTitle, j.company, j.url as jobUrl, j.locations, j.salaryMin, j.salaryMax, j.currency
+      FROM application_log al 
+      LEFT JOIN job j ON al.jobId = j.id
+      WHERE al.jobBoardConfigId LIKE ?
+      ORDER BY al.createdAt DESC
+    `
+    const logs = await query(sql, [`config_${userId}`])
+    return logs.map((log: any) => ({
+      ...log,
+      followUpRequired: Boolean(log.followUpRequired),
+      appliedAt: log.appliedAt || log.createdAt
+    }))
   }
 }
 
@@ -366,6 +387,7 @@ export interface User {
   email: string
   name?: string
   image?: string
+  phone?: string
   provider: string
   providerId: string
   lastLoginAt?: Date
@@ -398,6 +420,7 @@ export interface JobBoardConfig {
     autoApply: boolean
     maxApplicationsPerDay: number
     coverLetterTemplate?: string
+    useCustomTemplate?: boolean
     resumeUrl?: string
     customMessage?: string
   }

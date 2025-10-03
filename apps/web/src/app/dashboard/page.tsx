@@ -61,6 +61,8 @@ export default function Dashboard() {
   const [totalJobs, setTotalJobs] = useState(0)
   const [isScrapingJobs, setIsScrapingJobs] = useState(false)
   const [showSourceSelector, setShowSourceSelector] = useState(false)
+  const [appliedJobsData, setAppliedJobsData] = useState<any>(null)
+  const [loadingApplications, setLoadingApplications] = useState(false)
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -85,9 +87,26 @@ export default function Dashboard() {
     }
   }, [currentPage, searchTerm])
 
+  const fetchAppliedJobs = useCallback(async () => {
+    try {
+      setLoadingApplications(true)
+      const response = await fetch('/api/applied-jobs')
+      const data = await response.json()
+      
+      if (data.success) {
+        setAppliedJobsData(data.data)
+      }
+    } catch (error) {
+      console.error('Error fetching applied jobs:', error)
+    } finally {
+      setLoadingApplications(false)
+    }
+  }, [])
+
   useEffect(() => {
     fetchJobs()
-  }, [fetchJobs])
+    fetchAppliedJobs()
+  }, [fetchJobs, fetchAppliedJobs])
 
   const scrapeRealJobs = async (options: {
     sources: string[]
@@ -204,19 +223,19 @@ export default function Dashboard() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">12</div>
+              <div className="text-2xl font-bold">{loadingApplications ? '...' : appliedJobsData?.statistics?.total || 0}</div>
               <p className="text-xs text-muted-foreground">Applications sent</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Response Rate</CardTitle>
+              <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
               <Star className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">18%</div>
-              <p className="text-xs text-muted-foreground">Employer responses</p>
+              <div className="text-2xl font-bold">{loadingApplications ? '...' : appliedJobsData?.statistics?.successRate || 0}%</div>
+              <p className="text-xs text-muted-foreground">Successful applications</p>
             </CardContent>
           </Card>
 
@@ -378,6 +397,70 @@ export default function Dashboard() {
             ))
           )}
         </div>
+
+        {/* Applied Jobs Section */}
+        {appliedJobsData && appliedJobsData.applications.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Applied Jobs</CardTitle>
+              <CardDescription>
+                View your job applications and their status
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {appliedJobsData.applications.slice(0, 10).map((application: any) => (
+                  <div key={application.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-lg">{application.jobTitle || 'Job Title Unavailable'}</h3>
+                      <p className="text-gray-600">{application.company || 'Company Name Unavailable'}</p>
+                      <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-4 w-4" />
+                          {new Date(application.appliedAt).toLocaleDateString()}
+                        </span>
+                        {application.locations && application.locations.length > 0 && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-4 w-4" />
+                            {JSON.parse(application.locations)[0]}
+                          </span>
+                        )}
+                        {application.salaryMin && application.salaryMax && (
+                          <span className="flex items-center gap-1">
+                            <DollarSign className="h-4 w-4" />
+                            {application.salaryMin}k - {application.salaryMax}k {application.currency || 'EUR'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Badge variant={application.status === 'applied' ? 'default' : 'destructive'}>
+                        {application.status === 'applied' ? 'Applied' : 'Failed'}
+                      </Badge>
+                      {application.jobUrl && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => window.open(application.jobUrl, '_blank', 'noopener noreferrer')}
+                        >
+                          <ExternalLink className="h-4 w-4 mr-1" />
+                          View Job
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {appliedJobsData.applications.length > 10 && (
+                  <div className="text-center pt-4">
+                    <p className="text-sm text-gray-500">
+                      Showing 10 of {appliedJobsData.applications.length} applications
+                    </p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Pagination */}
         {!loading && jobs.length > 0 && (

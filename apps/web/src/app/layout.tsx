@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import Link from "next/link";
 import { SessionProvider } from "@/components/session-provider";
 import { UserInitializer } from "@/components/user-initializer";
+import { Navigation } from "@/components/navigation";
 import "./globals.css";
 
 const inter = Inter({
@@ -36,42 +36,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-background font-sans antialiased">
         <SessionProvider>
           <UserInitializer />
-          <nav className="border-b bg-background">
-          <div className="container mx-auto px-4">
-            <div className="flex h-16 items-center space-x-8">
-              <Link href="/" className="text-xl font-bold">
-                🎯 JobHunt
-              </Link>
-              
-              <div className="flex space-x-6">
-                <Link 
-                  href="/" 
-                  className="text-sm font-medium transition-colors hover:text-primary"
-                >
-                  🏠 Dashboard
-                </Link>
-                <Link 
-                  href="/profile" 
-                  className="text-sm font-medium transition-colors hover:text-primary"
-                >
-                  ⚙️ Profile
-                </Link>
-                <Link 
-                  href="/jobs" 
-                  className="text-sm font-medium transition-colors hover:text-primary"
-                >
-                  💼 Jobs
-                </Link>
-                <Link 
-                  href="/automation" 
-                  className="text-sm font-medium transition-colors hover:text-primary"
-                >
-                  🤖 Automation
-                </Link>
-              </div>
-            </div>
-          </div>
-        </nav>
+          <Navigation />
           <main>
             {children}
           </main>

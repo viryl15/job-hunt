@@ -68,6 +68,7 @@ Je serais ravi de discuter de ma candidature lors d'un entretien.
 
 Cordialement,
 {{USER_NAME}}`,
+            useCustomTemplate: true,
             resumeUrl: '',
             customMessage: ''
           },
@@ -100,6 +101,7 @@ Cordialement,
           autoApply: false,
           maxApplicationsPerDay: 5,
           coverLetterTemplate: 'Template par défaut',
+          useCustomTemplate: true,
           resumeUrl: '',
           customMessage: ''
         },
@@ -116,6 +118,25 @@ Cordialement,
       }, { status: 404 })
     }
     
+    // Update user profile information (name and phone)
+    if (profileData.personalInfo) {
+      const userUpdates: any = {}
+      
+      const fullName = `${profileData.personalInfo.firstName || ''} ${profileData.personalInfo.lastName || ''}`.trim()
+      if (fullName) {
+        userUpdates.name = fullName
+      }
+      
+      if (profileData.personalInfo.phone) {
+        userUpdates.phone = profileData.personalInfo.phone
+      }
+      
+      if (Object.keys(userUpdates).length > 0) {
+        await db.updateUser(user.id, userUpdates)
+        console.log('✅ User profile updated:', userUpdates)
+      }
+    }
+
     // Update config with profile information
     const updatedConfig = {
       ...existingConfig,
@@ -137,6 +158,7 @@ Cordialement,
       applicationSettings: {
         ...existingConfig.applicationSettings,
         coverLetterTemplate: profileData.documents?.coverLetterTemplate || existingConfig.applicationSettings.coverLetterTemplate,
+        useCustomTemplate: profileData.automation?.useCustomTemplate !== undefined ? profileData.automation.useCustomTemplate : existingConfig.applicationSettings.useCustomTemplate,
         maxApplicationsPerDay: profileData.automation?.maxApplicationsPerDay || existingConfig.applicationSettings.maxApplicationsPerDay,
         resumeUrl: profileData.documents?.resumeUrl || existingConfig.applicationSettings.resumeUrl,
         customMessage: profileData.automation?.customMotivationMessage || existingConfig.applicationSettings.customMessage
@@ -217,6 +239,7 @@ export async function GET(request: NextRequest) {
           autoApply: false,
           maxApplicationsPerDay: 5,
           coverLetterTemplate: 'Template par défaut',
+          useCustomTemplate: true,
           resumeUrl: '',
           customMessage: ''
         },
@@ -239,7 +262,7 @@ export async function GET(request: NextRequest) {
         firstName: config.credentials.username?.split(' ')[0] || user.name?.split(' ')[0] || '',
         lastName: config.credentials.username?.split(' ').slice(1).join(' ') || user.name?.split(' ').slice(1).join(' ') || '',
         email: config.credentials.email || user.email,
-        phone: '',
+        phone: user.phone || '',
         city: config.preferences.locations?.[0] || '',
         country: 'France'
       },
@@ -273,6 +296,7 @@ export async function GET(request: NextRequest) {
       },
       automation: {
         autoApplyEnabled: config.applicationSettings.autoApply || false,
+        useCustomTemplate: config.applicationSettings.useCustomTemplate !== undefined ? config.applicationSettings.useCustomTemplate : true,
         maxApplicationsPerDay: config.applicationSettings.maxApplicationsPerDay || 5,
         customMotivationMessage: config.applicationSettings.customMessage || '',
         skipCompanies: []
