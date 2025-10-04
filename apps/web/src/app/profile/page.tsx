@@ -17,6 +17,7 @@ interface UserProfile {
     email: string
     phone?: string
     city: string
+    postalCode?: string
     country: string
   }
   professional: {
@@ -58,6 +59,7 @@ export default function ProfileSettingsPage() {
       email: '',
       phone: '',
       city: '',
+      postalCode: '',
       country: 'France'
     },
     professional: {
@@ -347,6 +349,18 @@ Cordialement,
                       personalInfo: { ...prev.personalInfo, city: e.target.value }
                     }))}
                     placeholder="Paris"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="postalCode">Code Postal (optionnel)</Label>
+                  <Input
+                    id="postalCode"
+                    value={profile.personalInfo.postalCode}
+                    onChange={(e) => setProfile(prev => ({
+                      ...prev,
+                      personalInfo: { ...prev.personalInfo, postalCode: e.target.value }
+                    }))}
+                    placeholder="75001"
                   />
                 </div>
               </div>

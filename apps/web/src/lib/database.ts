@@ -532,6 +532,9 @@ export interface User {
   name?: string
   image?: string
   phone?: string
+  city?: string
+  postalCode?: string
+  country?: string
   provider: string
   providerId: string
   lastLoginAt?: Date
@@ -550,6 +553,8 @@ export interface JobBoardConfig {
     email?: string
     password?: string // encrypted
     apiKey?: string
+    phone?: string // Phone number for applications
+    address?: string // Address for applications
   }
   preferences: {
     skills: string[]

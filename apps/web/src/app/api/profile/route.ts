@@ -118,7 +118,7 @@ Cordialement,
       }, { status: 404 })
     }
     
-    // Update user profile information (name and phone)
+    // Update user profile information (name, phone, city, postalCode)
     if (profileData.personalInfo) {
       const userUpdates: any = {}
       
@@ -129,6 +129,18 @@ Cordialement,
       
       if (profileData.personalInfo.phone) {
         userUpdates.phone = profileData.personalInfo.phone
+      }
+      
+      if (profileData.personalInfo.city) {
+        userUpdates.city = profileData.personalInfo.city
+      }
+      
+      if (profileData.personalInfo.postalCode) {
+        userUpdates.postalCode = profileData.personalInfo.postalCode
+      }
+      
+      if (profileData.personalInfo.country) {
+        userUpdates.country = profileData.personalInfo.country
       }
       
       if (Object.keys(userUpdates).length > 0) {
@@ -263,8 +275,9 @@ export async function GET(request: NextRequest) {
         lastName: config.credentials.username?.split(' ').slice(1).join(' ') || user.name?.split(' ').slice(1).join(' ') || '',
         email: config.credentials.email || user.email,
         phone: user.phone || '',
-        city: config.preferences.locations?.[0] || '',
-        country: 'France'
+        city: user.city || config.preferences.locations?.[0] || '',
+        postalCode: user.postalCode || '',
+        country: user.country || 'France'
       },
       professional: {
         currentTitle: 'Développeur',

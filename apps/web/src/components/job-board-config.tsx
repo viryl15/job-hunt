@@ -41,7 +41,9 @@ export function JobBoardConfigForm({ config, onSave, onCancel }: JobBoardConfigF
     credentials: {
       email: config?.credentials?.email || '',
       password: config?.credentials?.password || '',
-      username: config?.credentials?.username || ''
+      username: config?.credentials?.username || '',
+      phone: config?.credentials?.phone || '',
+      address: config?.credentials?.address || ''
     },
     preferences: {
       skills: config?.preferences?.skills || [],
@@ -185,6 +187,40 @@ export function JobBoardConfigForm({ config, onSave, onCancel }: JobBoardConfigF
                   placeholder="Your job board password"
                   required
                 />
+              </div>
+
+              <div>
+                <Label htmlFor="phone">Phone Number (Optional)</Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  value={formData.credentials.phone || ''}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    credentials: { ...prev.credentials, phone: e.target.value }
+                  }))}
+                  placeholder="0600000000"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Some applications may require your phone number
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="address">Address (Optional)</Label>
+                <Input
+                  id="address"
+                  type="text"
+                  value={formData.credentials.address || ''}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    credentials: { ...prev.credentials, address: e.target.value }
+                  }))}
+                  placeholder="123 Rue Example, 75001 Paris"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Some applications may require your address
+                </p>
               </div>
 
               <div className="flex items-center space-x-2">

@@ -90,11 +90,23 @@ export async function runAutoApplyAutomation(configId: string, useRealAutomation
         processedCoverLetter = ApplicationTemplateEngine.generateCoverLetter(template, job, userProfile)
       }
 
+      // Build address string from user profile data
+      let address = ''
+      if (user.city && user.postalCode) {
+        address = `${user.city} - ${user.postalCode}`
+      } else if (user.city) {
+        address = user.city
+      } else if (config.credentials.address) {
+        address = config.credentials.address
+      }
+
       // Create job-specific application data
       const jobApplicationData: ApplicationData = {
         coverLetter: processedCoverLetter,
         customMessage: config.applicationSettings.customMessage || '',
-        answers: {}
+        answers: {},
+        phone: user.phone || config.credentials.phone, // Prioritize user profile phone
+        address: address // Use formatted address from user profile
       }
 
       console.log(`Applying to: ${job.title} at ${job.company}`)

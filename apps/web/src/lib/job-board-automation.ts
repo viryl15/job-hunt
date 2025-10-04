@@ -76,6 +76,8 @@ export interface ApplicationData {
   resume?: File | string
   customMessage?: string
   answers?: Record<string, string> // For application form questions
+  phone?: string // Phone number for applications
+  address?: string // Address for applications
 }
 
 // HelloWork specific automation

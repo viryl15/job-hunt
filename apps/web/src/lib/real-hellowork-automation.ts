@@ -785,8 +785,8 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
         this.logger.info('   • Complete verification manually if needed')
         
         // Wait for potential manual completion with natural mouse movements
-        this.logger.info('Waiting 45 seconds for potential manual completion...')
-        await humanSleepWithMouse(this.page, 45000, 'Waiting for manual CAPTCHA completion with mouse activity', this.logger)
+        this.logger.info('Waiting 25 seconds for potential manual completion...')
+        await humanSleepWithMouse(this.page, 25000, 'Waiting for manual CAPTCHA completion with mouse activity', this.logger)
         
         // Check if verification was resolved
         const stillBlocked = await this.page.$(captchaSelectors.join(', '))
@@ -1337,8 +1337,8 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
         }
       }
       
-      // Wait for the actual form elements to be present
-      await this.page.waitForSelector('form#apply-form, button[data-cy="submitButton"]', { timeout: 15000 })
+      // Wait for the actual form elements to be present (HelloWork uses smart-apply-form)
+      await this.page.waitForSelector('form#smart-apply-form, form#apply-form, button[data-cy="submitButton"]', { timeout: 15000 })
       
       // Additional wait for form to be fully rendered
       await humanSleep(3000, 'Waiting for form to be fully rendered', this.logger)
@@ -1346,13 +1346,138 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
       // Take screenshot of the loaded application form
       await this.takeScreenshot('08-application-form-loaded')
 
-      // STEP 2: Look for the actual submit button inside the loaded form
-      this.logger.info('Looking for submit apply button (second button)')
+      // STEP 2: Check for "Continuer" button (two-step form)
+      this.logger.info('Checking for two-step form with "Continuer" button')
+      const continueButtonSelectors = [
+        'button[data-cy="saContinueButton"]',
+        'button[data-smart-apply-target="continueButton"]',
+        'form#smart-apply-form button[type="button"]',
+        'button:has-text("Continuer")'
+      ]
+
+      let continueButton = null
+      for (const selector of continueButtonSelectors) {
+        try {
+          const button = await this.page.$(selector)
+          if (button) {
+            const isVisible = await this.page.evaluate((el) => {
+              const rect = el.getBoundingClientRect()
+              const computedStyle = window.getComputedStyle(el)
+              return rect.width > 0 && rect.height > 0 && 
+                     computedStyle.visibility !== 'hidden' && 
+                     computedStyle.display !== 'none'
+            }, button)
+            
+            if (isVisible) {
+              continueButton = button
+              this.logger.success(`Found "Continuer" button: ${selector}`)
+              break
+            }
+          }
+        } catch (error) {
+          this.logger.debug(`"Continuer" button not found: ${selector}`)
+        }
+      }
+
+      // If "Continuer" button exists, click it to reveal additional fields
+      if (continueButton) {
+        this.logger.info('Two-step form detected, clicking "Continuer" button')
+        
+        await humanSleep(HumanDelays.formInteractionDelay(), 'Preparing to click Continuer', this.logger)
+        
+        try {
+          await this.page.evaluate((button) => {
+            button.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }, continueButton)
+          await humanSleep(500, 'Button scrolled into view', this.logger)
+          await continueButton.click()
+          this.logger.success('"Continuer" button clicked successfully')
+          
+          // Wait for additional fields to be revealed
+          await humanSleep(2000, 'Waiting for additional fields to appear', this.logger)
+          
+          // Take screenshot of revealed fields
+          await this.takeScreenshot('08b-additional-fields-revealed')
+          
+          // STEP 3: Fill additional required fields (phone, address, etc.)
+          this.logger.info('Filling additional required fields')
+          
+          // Phone field
+          if (application.phone) {
+            try {
+              const phoneSelectors = [
+                'input#sav2_field1',
+                'input[name="sav2_field1"]',
+                'input[type="tel"]',
+                'input[inputmode="numeric"][maxlength="10"]'
+              ]
+              
+              for (const phoneSelector of phoneSelectors) {
+                const phoneField = await this.page.$(phoneSelector)
+                if (phoneField) {
+                  this.logger.debug(`Found phone field: ${phoneSelector}`)
+                  
+                  await phoneField.click()
+                  await humanSleep(HumanDelays.randomDelay(300, 600))
+                  await phoneField.type(application.phone, { delay: HumanDelays.randomDelay(50, 150) })
+                  this.logger.success(`Phone number filled: ${application.phone}`)
+                  break
+                }
+              }
+            } catch (error) {
+              this.logger.warning('Could not fill phone field', { error })
+            }
+          } else {
+            this.logger.warning('No phone number provided in application data')
+          }
+          
+          // Address field (if present and provided)
+          if (application.address) {
+            try {
+              const addressSelectors = [
+                'input#sav2_field2',
+                'input[name="sav2_field2"]',
+                'input[name="Address"]',
+                'input[placeholder*="adresse"]'
+              ]
+              
+              for (const addressSelector of addressSelectors) {
+                const addressField = await this.page.$(addressSelector)
+                if (addressField) {
+                  this.logger.debug(`Found address field: ${addressSelector}`)
+                  
+                  await addressField.click()
+                  await humanSleep(HumanDelays.randomDelay(300, 600))
+                  await addressField.type(application.address, { delay: HumanDelays.randomDelay(50, 150) })
+                  this.logger.success(`Address filled: ${application.address}`)
+                  break
+                }
+              }
+            } catch (error) {
+              this.logger.debug('No address field found or not required')
+            }
+          } else {
+            this.logger.debug('No address provided in application data')
+          }
+          
+          // Wait a bit after filling fields
+          await humanSleep(1000, 'Fields filled, preparing to submit', this.logger)
+          
+        } catch (continueError) {
+          this.logger.error('Failed to click "Continuer" button or fill additional fields', { error: continueError })
+          throw continueError
+        }
+      } else {
+        this.logger.info('No "Continuer" button found - single-step form')
+      }
+
+      // STEP 4: Look for the actual submit button inside the loaded form
+      this.logger.info('Looking for submit apply button ("Postuler")')
       const submitButtonSelectors = [
         'button[type="submit"][data-cy="submitButton"]',
-        'button[formid="apply-form"][type="submit"]',
+        'button[form="smart-apply-form"][type="submit"]',
         'button[data-form-validator-target="button"]',
-        'form#apply-form button[type="submit"]',
+        'form#smart-apply-form button[type="submit"]',
         'turbo-frame button[type="submit"]',
         '#postuler button[type="submit"].tw-btn-primary-candidacy-l'
       ]
