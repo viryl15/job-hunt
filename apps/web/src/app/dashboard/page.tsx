@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { 
   Search, 
   MapPin, 
@@ -75,6 +76,10 @@ export default function Dashboard() {
   const [hasMoreApplications, setHasMoreApplications] = useState(false)
   const [applicationsStatusFilter, setApplicationsStatusFilter] = useState<string>('ALL')
   const applicationsEndRef = useRef<HTMLDivElement>(null)
+  
+  // Modal state for job details
+  const [selectedApplication, setSelectedApplication] = useState<any>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -151,6 +156,47 @@ export default function Dashboard() {
       setLoadingMoreApplications(false)
     }
   }, [applicationsPage, applicationsSearchTerm, applicationsStatusFilter, appliedJobsData])
+
+  // Update application status
+  const updateApplicationStatus = async (applicationId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/applications/${applicationId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Update the local state to reflect the change
+        setAppliedJobsData((prev: any) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            applications: prev.applications.map((app: any) =>
+              app.id === applicationId ? { ...app, status: newStatus } : app
+            ),
+          }
+        })
+        
+        // Update selected application if it's the one being edited
+        if (selectedApplication?.id === applicationId) {
+          setSelectedApplication((prev: any) => ({ ...prev, status: newStatus }))
+        }
+        
+        console.log('Application status updated successfully')
+      } else {
+        console.error('Failed to update status:', data.error)
+        alert('Failed to update application status. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error updating application status:', error)
+      alert('Error updating application status. Please try again.')
+    }
+  }
 
   // Infinite scroll observer
   useEffect(() => {
@@ -623,7 +669,11 @@ export default function Dashboard() {
                     {appliedJobsData.applications.map((application: any) => (
                       <div 
                         key={application.id} 
-                        className={`flex items-center justify-between p-4 border rounded-lg ${
+                        onClick={() => {
+                          setSelectedApplication(application)
+                          setIsModalOpen(true)
+                        }}
+                        className={`flex items-center justify-between p-4 border rounded-lg cursor-pointer hover:shadow-md transition-shadow ${
                           application.status === 'FAILED' ? 'border-red-300 bg-red-50' : ''
                         }`}
                       >
@@ -664,26 +714,15 @@ export default function Dashboard() {
                         </div>
                         <div className="flex items-center gap-3">
                           <Badge variant={
-                            application.status === 'HIRED' ? 'default' : 
-                            application.status === 'OFFER' ? 'default' :
+                            application.status === 'HIRED' || application.status === 'OFFER' ? 'default' :
                             application.status === 'TECH' || application.status === 'ONSITE' ? 'secondary' :
                             application.status === 'SCREEN' ? 'secondary' :
                             application.status === 'APPLIED' ? 'outline' :
-                            application.status === 'REJECTED' || application.status === 'FAILED' ? 'destructive' : 
+                            application.status === 'FAILED' || application.status === 'REJECTED' ? 'destructive' :
                             'outline'
                           }>
                             {application.status}
                           </Badge>
-                          {application.url && (
-                            <Button 
-                              variant={application.status === 'FAILED' ? 'default' : 'ghost'}
-                              size="sm"
-                              onClick={() => window.open(application.url, '_blank', 'noopener noreferrer')}
-                            >
-                              <ExternalLink className="h-4 w-4 mr-1" />
-                              {application.status === 'FAILED' ? 'Retry' : 'View Job'}
-                            </Button>
-                          )}
                         </div>
                       </div>
                     ))}
@@ -754,6 +793,156 @@ export default function Dashboard() {
         </Tabs>
 
       </div>
+
+      {/* Job Details Modal */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          {selectedApplication && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-2xl">{selectedApplication.title || 'Job Details'}</DialogTitle>
+                <DialogDescription>
+                  {selectedApplication.company && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <Building2 className="h-4 w-4" />
+                      <span className="text-lg font-semibold">{selectedApplication.company}</span>
+                    </div>
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-6 mt-4">
+                {/* Status Section */}
+                <div className="border-b pb-4">
+                  <label className="text-sm font-semibold text-gray-700 mb-2 block">Application Status</label>
+                  <Select 
+                    value={selectedApplication.status} 
+                    onValueChange={(newStatus) => updateApplicationStatus(selectedApplication.id, newStatus)}
+                  >
+                    <SelectTrigger className={`w-full ${
+                      selectedApplication.status === 'HIRED' || selectedApplication.status === 'OFFER' ? 'border-green-500 text-green-700' :
+                      selectedApplication.status === 'TECH' || selectedApplication.status === 'ONSITE' ? 'border-purple-500 text-purple-700' :
+                      selectedApplication.status === 'SCREEN' ? 'border-yellow-500 text-yellow-700' :
+                      selectedApplication.status === 'APPLIED' ? 'border-blue-500 text-blue-700' :
+                      selectedApplication.status === 'FAILED' || selectedApplication.status === 'REJECTED' ? 'border-red-500 text-red-700' :
+                      'border-gray-300 text-gray-700'
+                    }`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="LEAD">Lead</SelectItem>
+                      <SelectItem value="APPLIED">Applied</SelectItem>
+                      <SelectItem value="FAILED">Failed</SelectItem>
+                      <SelectItem value="SCREEN">Screening</SelectItem>
+                      <SelectItem value="TECH">Tech Interview</SelectItem>
+                      <SelectItem value="ONSITE">Onsite</SelectItem>
+                      <SelectItem value="OFFER">Offer</SelectItem>
+                      <SelectItem value="HIRED">Hired</SelectItem>
+                      <SelectItem value="REJECTED">Rejected</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Job Information */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700">Applied Date</label>
+                    <p className="text-gray-600 mt-1 flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      {new Date(selectedApplication.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  
+                  {selectedApplication.locations && selectedApplication.locations.length > 0 && (
+                    <div>
+                      <label className="text-sm font-semibold text-gray-700">Location</label>
+                      <p className="text-gray-600 mt-1 flex items-center gap-2">
+                        <MapPin className="h-4 w-4" />
+                        {selectedApplication.locations.join(', ')}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {selectedApplication.salaryMin && selectedApplication.salaryMax && (
+                    <div>
+                      <label className="text-sm font-semibold text-gray-700">Salary Range</label>
+                      <p className="text-gray-600 mt-1 flex items-center gap-2">
+                        <DollarSign className="h-4 w-4" />
+                        {selectedApplication.salaryMin}k - {selectedApplication.salaryMax}k {selectedApplication.currency || 'EUR'}
+                      </p>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700">Channel</label>
+                    <p className="text-gray-600 mt-1">
+                      {selectedApplication.channel || 'FORM'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Description */}
+                {selectedApplication.description && (
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700">Job Description</label>
+                    <div className="mt-2 p-4 bg-gray-50 rounded-lg text-sm text-gray-700 max-h-60 overflow-y-auto">
+                      {selectedApplication.description}
+                    </div>
+                  </div>
+                )}
+
+                {/* Notes / Error Message */}
+                {selectedApplication.notes && (
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700">
+                      {selectedApplication.status === 'FAILED' ? 'Error Message' : 'Notes'}
+                    </label>
+                    <div className={`mt-2 p-4 rounded-lg text-sm ${
+                      selectedApplication.status === 'FAILED' 
+                        ? 'bg-red-50 text-red-700 border border-red-200' 
+                        : 'bg-gray-50 text-gray-700'
+                    }`}>
+                      {selectedApplication.notes}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tags */}
+                {selectedApplication.tags && selectedApplication.tags.length > 0 && (
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700">Tags</label>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {selectedApplication.tags.map((tag: string, index: number) => (
+                        <Badge key={index} variant="secondary">{tag}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-4 border-t">
+                  {selectedApplication.url && (
+                    <Button 
+                      onClick={() => window.open(selectedApplication.url, '_blank', 'noopener noreferrer')}
+                      className="flex-1"
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      {selectedApplication.status === 'FAILED' ? 'Retry Application' : 'View Job Posting'}
+                    </Button>
+                  )}
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setIsModalOpen(false)}
+                    className="flex-1"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
