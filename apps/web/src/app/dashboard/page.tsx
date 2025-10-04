@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -19,7 +19,8 @@ import {
   Users,
   Settings,
   Zap,
-  ListChecks
+  ListChecks,
+  Loader2
 } from 'lucide-react'
 import Link from 'next/link'
 import { JobSourceSelector } from '@/components/JobSourceSelector'
@@ -64,6 +65,13 @@ export default function Dashboard() {
   const [showSourceSelector, setShowSourceSelector] = useState(false)
   const [appliedJobsData, setAppliedJobsData] = useState<any>(null)
   const [loadingApplications, setLoadingApplications] = useState(false)
+  
+  // New state for applications search and infinite scroll
+  const [applicationsSearchTerm, setApplicationsSearchTerm] = useState('')
+  const [applicationsPage, setApplicationsPage] = useState(1)
+  const [loadingMoreApplications, setLoadingMoreApplications] = useState(false)
+  const [hasMoreApplications, setHasMoreApplications] = useState(false)
+  const applicationsEndRef = useRef<HTMLDivElement>(null)
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -88,16 +96,44 @@ export default function Dashboard() {
     }
   }, [currentPage, searchTerm])
 
-  const fetchAppliedJobs = useCallback(async () => {
+  const fetchAppliedJobs = useCallback(async (loadMore = false) => {
     try {
-      setLoadingApplications(true)
-      const response = await fetch('/api/applied-jobs')
+      if (loadMore) {
+        setLoadingMoreApplications(true)
+      } else {
+        setLoadingApplications(true)
+        setApplicationsPage(1) // Reset page when not loading more
+      }
+      
+      const page = loadMore ? applicationsPage + 1 : 1
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: '20',
+        ...(applicationsSearchTerm && { search: applicationsSearchTerm })
+      })
+      
+      const response = await fetch(`/api/applied-jobs?${params}`)
       const data = await response.json()
       
       console.log('Applied jobs API response:', data)
       
       if (data.success) {
-        setAppliedJobsData(data.data)
+        if (loadMore && appliedJobsData) {
+          // Append new applications to existing ones
+          setAppliedJobsData({
+            ...data.data,
+            applications: [...appliedJobsData.applications, ...data.data.applications]
+          })
+        } else {
+          // Replace applications
+          setAppliedJobsData(data.data)
+        }
+        
+        setHasMoreApplications(data.data.pagination?.hasMore || false)
+        if (loadMore) {
+          setApplicationsPage(page)
+        }
+        
         console.log('Applications count:', data.data?.applications?.length || 0)
       } else {
         console.error('API returned error:', data.error)
@@ -106,13 +142,48 @@ export default function Dashboard() {
       console.error('Error fetching applied jobs:', error)
     } finally {
       setLoadingApplications(false)
+      setLoadingMoreApplications(false)
     }
-  }, [])
+  }, [applicationsPage, applicationsSearchTerm, appliedJobsData])
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMoreApplications && !loadingMoreApplications) {
+          fetchAppliedJobs(true)
+        }
+      },
+      { threshold: 0.1 }
+    )
+
+    const currentRef = applicationsEndRef.current
+    if (currentRef) {
+      observer.observe(currentRef)
+    }
+
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef)
+      }
+    }
+  }, [hasMoreApplications, loadingMoreApplications, fetchAppliedJobs])
+
+  // Debounced search for applications
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (applicationsSearchTerm !== undefined) {
+        fetchAppliedJobs(false)
+      }
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [applicationsSearchTerm])
 
   useEffect(() => {
     fetchJobs()
-    fetchAppliedJobs()
-  }, [fetchJobs, fetchAppliedJobs])
+    fetchAppliedJobs(false)
+  }, [fetchJobs])
 
   const scrapeRealJobs = async (options: {
     sources: string[]
@@ -491,14 +562,31 @@ export default function Dashboard() {
                 {/* Applications List */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>All Applications</CardTitle>
-                    <CardDescription>
-                      Track the status of your {appliedJobsData.applications.length} job applications
-                    </CardDescription>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>All Applications</CardTitle>
+                        <CardDescription>
+                          {appliedJobsData.pagination?.total || appliedJobsData.applications.length} total applications
+                        </CardDescription>
+                      </div>
+                    </div>
+                    {/* Search Input */}
+                    <div className="mt-4">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                        <Input
+                          type="text"
+                          placeholder="Search by job title, company, or location..."
+                          value={applicationsSearchTerm}
+                          onChange={(e) => setApplicationsSearchTerm(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
                   </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {appliedJobsData.applications.slice(0, 10).map((application: any) => (
+                {appliedJobsData.applications.map((application: any) => (
                   <div key={application.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex-1">
                       <h3 className="font-semibold text-lg">{application.title || 'Job Title Unavailable'}</h3>
@@ -547,10 +635,23 @@ export default function Dashboard() {
                     </div>
                   </div>
                 ))}
-                {appliedJobsData.applications.length > 10 && (
-                  <div className="text-center pt-4">
+                
+                {/* Infinite Scroll Loading Indicator */}
+                {loadingMoreApplications && (
+                  <div className="text-center py-4">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-gray-400" />
+                    <p className="text-sm text-gray-500 mt-2">Loading more applications...</p>
+                  </div>
+                )}
+                
+                {/* Intersection Observer Target */}
+                <div ref={applicationsEndRef} className="h-4" />
+                
+                {/* Show end message when no more results */}
+                {!hasMoreApplications && appliedJobsData.applications.length > 0 && (
+                  <div className="text-center py-4">
                     <p className="text-sm text-gray-500">
-                      Showing 10 of {appliedJobsData.applications.length} applications
+                      End of applications list
                     </p>
                   </div>
                 )}
@@ -564,16 +665,23 @@ export default function Dashboard() {
                 <CardContent className="py-12">
                   <div className="text-center">
                     <ListChecks className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No applications yet</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      {applicationsSearchTerm ? 'No matching applications found' : 'No applications yet'}
+                    </h3>
                     <p className="text-gray-500 mb-4">
-                      Start applying to jobs to track your application progress here.
+                      {applicationsSearchTerm 
+                        ? 'Try adjusting your search terms'
+                        : 'Start applying to jobs to track your application progress here.'
+                      }
                     </p>
-                    <Link href="/auto-apply">
-                      <Button>
-                        <Zap className="h-4 w-4 mr-2" />
-                        Start Auto Apply
-                      </Button>
-                    </Link>
+                    {!applicationsSearchTerm && (
+                      <Link href="/auto-apply">
+                        <Button>
+                          <Zap className="h-4 w-4 mr-2" />
+                          Start Auto Apply
+                        </Button>
+                      </Link>
+                    )}
                   </div>
                 </CardContent>
               </Card>

@@ -27,12 +27,33 @@ export async function GET(request: NextRequest) {
       }, { status: 404 })
     }
 
+    // Get query parameters for search and pagination
+    const { searchParams } = new URL(request.url)
+    const search = searchParams.get('search') || ''
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '20')
+    const offset = (page - 1) * limit
+
     // Get applied jobs from the main application table
-    const applications = await db.getUserApplicationsFromMainTable(user.id)
+    let applications = await db.getUserApplicationsFromMainTable(user.id)
     console.log('[Applied Jobs API] Applications found:', applications.length)
     
-    // Get summary statistics
-    const totalApplications = applications.length
+    // Filter applications by search term (title, company, or location)
+    if (search) {
+      const searchLower = search.toLowerCase()
+      applications = applications.filter(app => 
+        (app.title && app.title.toLowerCase().includes(searchLower)) ||
+        (app.company && app.company.toLowerCase().includes(searchLower)) ||
+        (app.locations && app.locations.some((loc: string) => loc.toLowerCase().includes(searchLower)))
+      )
+      console.log('[Applied Jobs API] Filtered applications:', applications.length)
+    }
+    
+    // Paginate applications
+    const paginatedApplications = applications.slice(offset, offset + limit)
+    
+    // Get summary statistics (use all applications, not paginated ones)
+    const allApplicationsCount = applications.length
     const appliedApplications = applications.filter(app => app.status === 'APPLIED').length
     const screeningApplications = applications.filter(app => app.status === 'SCREEN').length
     const interviewApplications = applications.filter(app => ['TECH', 'ONSITE'].includes(app.status)).length
@@ -62,17 +83,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        applications: applications,
+        applications: paginatedApplications,
         applicationsByStatus: applicationsByStatus,
+        pagination: {
+          page,
+          limit,
+          total: allApplicationsCount,
+          totalPages: Math.ceil(allApplicationsCount / limit),
+          hasMore: offset + limit < allApplicationsCount
+        },
         statistics: {
-          total: totalApplications,
+          total: allApplicationsCount,
           applied: appliedApplications,
           screening: screeningApplications,
           interview: interviewApplications,
           offer: offerApplications,
           hired: hiredApplications,
           rejected: rejectedApplications,
-          successRate: totalApplications > 0 ? Math.round(((hiredApplications + offerApplications) / totalApplications) * 100) : 0
+          successRate: allApplicationsCount > 0 ? Math.round(((hiredApplications + offerApplications) / allApplicationsCount) * 100) : 0
         },
         chartData: Object.entries(applicationsByDate).map(([date, count]) => ({
           date,
