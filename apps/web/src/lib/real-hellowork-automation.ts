@@ -841,13 +841,13 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
       this.logger.info('🔍 Searching for jobs on HelloWork', criteria)
       
       // Build HelloWork search URL with proper parameters based on your discovery
-      const topSkills = criteria.keywords.slice(0, 2) // Take first 2 skills for better results
-      const searchKeywords = topSkills.join('+') // HelloWork uses + to combine skills
+      // Use only the first keyword for more focused results (search skill by skill)
+      const searchKeyword = criteria.keywords[0] || ''
       const location = (criteria.location || 'france').toLowerCase()
       
       // Construct HelloWork search URL with all parameters
       const searchParams = new URLSearchParams({
-        'k': searchKeywords,
+        'k': searchKeyword,
         'k_autocomplete': '',
         'l': location,
         'l_autocomplete': '',
@@ -866,7 +866,7 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
       
       this.logger.info('Navigating directly to HelloWork search results', { 
         searchUrl: searchUrlWithParams,
-        keywords: topSkills,
+        keyword: searchKeyword,
         location
       })
       
@@ -1894,20 +1894,68 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
   }> {
     console.log('🚀 Starting automated job search and application process...')
     
-    // First, search for jobs
-    const jobs = await this.searchJobs(criteria)
-    console.log(`📋 Found ${jobs.length} jobs matching criteria`)
+    const allJobs: JobListing[] = []
+    const jobIds = new Set<string>() // Track job IDs to avoid duplicates across skills
     
-    if (jobs.length === 0) {
+    // Search for each skill individually instead of combining them
+    const skills = criteria.keywords.slice(0, 5) // Limit to first 5 skills to avoid too many searches
+    console.log(`🔎 Searching for jobs with ${skills.length} skills individually...`)
+    
+    for (let i = 0; i < skills.length; i++) {
+      const skill = skills[i]
+      console.log(`\n🔍 [${i + 1}/${skills.length}] Searching for skill: "${skill}"`)
+      
+      try {
+        // Create criteria with single skill
+        const singleSkillCriteria: SearchCriteria = {
+          ...criteria,
+          keywords: [skill]
+        }
+        
+        const jobs = await this.searchJobs(singleSkillCriteria)
+        console.log(`   Found ${jobs.length} jobs for "${skill}"`)
+        
+        // Add only new jobs (deduplicate by ID)
+        let newJobsCount = 0
+        for (const job of jobs) {
+          if (!jobIds.has(job.id)) {
+            jobIds.add(job.id)
+            allJobs.push(job)
+            newJobsCount++
+          }
+        }
+        
+        if (newJobsCount > 0) {
+          console.log(`   ✅ Added ${newJobsCount} new unique jobs`)
+        } else {
+          console.log(`   ⏭️  No new jobs (all were duplicates)`)
+        }
+        
+        // Add delay between skill searches to appear human-like
+        if (i < skills.length - 1) {
+          const delay = Math.random() * 5000 + 3000 // 3-8 seconds
+          console.log(`   ⏱️  Waiting ${Math.round(delay/1000)}s before searching next skill...`)
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
+        
+      } catch (error) {
+        console.error(`   ❌ Error searching for skill "${skill}":`, error)
+        // Continue with other skills even if one fails
+      }
+    }
+    
+    console.log(`\n📋 Total unique jobs found across all skills: ${allJobs.length}`)
+    
+    if (allJobs.length === 0) {
       return { searchResults: [], applications: [] }
     }
     
     const applications: AutoApplicationResult[] = []
     
     // Apply to each job found
-    for (let i = 0; i < jobs.length; i++) {
-      const job = jobs[i]
-      console.log(`\n📤 Applying to job ${i + 1}/${jobs.length}: "${job.title}" at "${job.company}"`)
+    for (let i = 0; i < allJobs.length; i++) {
+      const job = allJobs[i]
+      console.log(`\n📤 Applying to job ${i + 1}/${allJobs.length}: "${job.title}" at "${job.company}"`)
       
       try {
         // Use the job URL directly for application
@@ -1921,7 +1969,7 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
         }
         
         // Add delay between applications to appear human-like
-        if (i < jobs.length - 1) {
+        if (i < allJobs.length - 1) {
           const delay = Math.random() * 30000 + 15000 // 15-45 seconds
           console.log(`⏱️ Waiting ${Math.round(delay/1000)} seconds before next application...`)
           await new Promise(resolve => setTimeout(resolve, delay))
@@ -1943,7 +1991,7 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
     console.log(`   ✅ Successful applications: ${successful}`)
     console.log(`   ❌ Failed applications: ${applications.length - successful}`)
     
-    return { searchResults: jobs, applications }
+    return { searchResults: allJobs, applications }
   }
 
   async logout(): Promise<void> {
