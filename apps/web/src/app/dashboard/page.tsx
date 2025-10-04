@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { 
   Search, 
   MapPin, 
@@ -20,7 +21,8 @@ import {
   Settings,
   Zap,
   ListChecks,
-  Loader2
+  Loader2,
+  AlertCircle
 } from 'lucide-react'
 import Link from 'next/link'
 import { JobSourceSelector } from '@/components/JobSourceSelector'
@@ -71,6 +73,7 @@ export default function Dashboard() {
   const [applicationsPage, setApplicationsPage] = useState(1)
   const [loadingMoreApplications, setLoadingMoreApplications] = useState(false)
   const [hasMoreApplications, setHasMoreApplications] = useState(false)
+  const [applicationsStatusFilter, setApplicationsStatusFilter] = useState<string>('ALL')
   const applicationsEndRef = useRef<HTMLDivElement>(null)
 
   const fetchJobs = useCallback(async () => {
@@ -109,8 +112,11 @@ export default function Dashboard() {
       const params = new URLSearchParams({
         page: page.toString(),
         limit: '20',
-        ...(applicationsSearchTerm && { search: applicationsSearchTerm })
+        ...(applicationsSearchTerm && { search: applicationsSearchTerm }),
+        ...(applicationsStatusFilter !== 'ALL' && { status: applicationsStatusFilter })
       })
+      
+      console.log('[Dashboard] Fetching applications with status filter:', applicationsStatusFilter, 'params:', params.toString())
       
       const response = await fetch(`/api/applied-jobs?${params}`)
       const data = await response.json()
@@ -144,7 +150,7 @@ export default function Dashboard() {
       setLoadingApplications(false)
       setLoadingMoreApplications(false)
     }
-  }, [applicationsPage, applicationsSearchTerm, appliedJobsData])
+  }, [applicationsPage, applicationsSearchTerm, applicationsStatusFilter, appliedJobsData])
 
   // Infinite scroll observer
   useEffect(() => {
@@ -169,16 +175,16 @@ export default function Dashboard() {
     }
   }, [hasMoreApplications, loadingMoreApplications, fetchAppliedJobs])
 
-  // Debounced search for applications
+  // Debounced search and filter for applications
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (applicationsSearchTerm !== undefined) {
+      if (applicationsSearchTerm !== undefined || applicationsStatusFilter !== 'ALL') {
         fetchAppliedJobs(false)
       }
     }, 500)
 
     return () => clearTimeout(timer)
-  }, [applicationsSearchTerm])
+  }, [applicationsSearchTerm, applicationsStatusFilter])
 
   useEffect(() => {
     fetchJobs()
@@ -521,43 +527,53 @@ export default function Dashboard() {
               <div className="text-center py-12">
                 <p className="text-gray-500">Loading applications...</p>
               </div>
-            ) : appliedJobsData && appliedJobsData.applications && appliedJobsData.applications.length > 0 ? (
+            ) : appliedJobsData ? (
               <div className="space-y-6">
-                {/* Application Statistics */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="text-2xl font-bold text-blue-600">
-                        {appliedJobsData.statistics.applied}
-                      </div>
-                      <p className="text-xs text-muted-foreground">Applied</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="text-2xl font-bold text-yellow-600">
-                        {appliedJobsData.statistics.screening}
-                      </div>
-                      <p className="text-xs text-muted-foreground">Screening</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="text-2xl font-bold text-purple-600">
-                        {appliedJobsData.statistics.interview}
-                      </div>
-                      <p className="text-xs text-muted-foreground">Interviews</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="text-2xl font-bold text-green-600">
-                        {appliedJobsData.statistics.offer + appliedJobsData.statistics.hired}
-                      </div>
-                      <p className="text-xs text-muted-foreground">Offers/Hired</p>
-                    </CardContent>
-                  </Card>
-                </div>
+                {/* Application Statistics - Only show if we have applications and no active filters */}
+                {appliedJobsData.applications.length > 0 && !applicationsSearchTerm && applicationsStatusFilter === 'ALL' && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {appliedJobsData.statistics.applied}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Applied</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-2xl font-bold text-red-600">
+                          {appliedJobsData.statistics.failed || 0}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Failed</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-2xl font-bold text-yellow-600">
+                          {appliedJobsData.statistics.screening}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Screening</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-2xl font-bold text-purple-600">
+                          {appliedJobsData.statistics.interview}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Interviews</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-2xl font-bold text-green-600">
+                          {appliedJobsData.statistics.offer + appliedJobsData.statistics.hired}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Offers/Hired</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
 
                 {/* Applications List */}
                 <Card>
@@ -570,9 +586,9 @@ export default function Dashboard() {
                         </CardDescription>
                       </div>
                     </div>
-                    {/* Search Input */}
-                    <div className="mt-4">
-                      <div className="relative">
+                    {/* Search and Filter */}
+                    <div className="mt-4 flex gap-3">
+                      <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                         <Input
                           type="text"
@@ -582,76 +598,129 @@ export default function Dashboard() {
                           className="pl-10"
                         />
                       </div>
+                      <Select value={applicationsStatusFilter} onValueChange={setApplicationsStatusFilter}>
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue placeholder="Filter by status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ALL">All Statuses</SelectItem>
+                          <SelectItem value="APPLIED">Applied</SelectItem>
+                          <SelectItem value="FAILED">Failed</SelectItem>
+                          <SelectItem value="SCREEN">Screening</SelectItem>
+                          <SelectItem value="TECH">Technical Interview</SelectItem>
+                          <SelectItem value="ONSITE">Onsite Interview</SelectItem>
+                          <SelectItem value="OFFER">Offer</SelectItem>
+                          <SelectItem value="HIRED">Hired</SelectItem>
+                          <SelectItem value="REJECTED">Rejected</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {appliedJobsData.applications.map((application: any) => (
-                  <div key={application.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lg">{application.title || 'Job Title Unavailable'}</h3>
-                      <p className="text-gray-600">{application.company || 'Company Name Unavailable'}</p>
-                      <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-4 w-4" />
-                          {new Date(application.createdAt).toLocaleDateString()}
-                        </span>
-                        {application.locations && application.locations.length > 0 && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-4 w-4" />
-                            {application.locations[0]}
-                          </span>
-                        )}
-                        {application.salaryMin && application.salaryMax && (
-                          <span className="flex items-center gap-1">
-                            <DollarSign className="h-4 w-4" />
-                            {application.salaryMin}k - {application.salaryMax}k {application.currency || 'EUR'}
-                          </span>
-                        )}
+                {appliedJobsData.applications.length > 0 ? (
+                  <>
+                    {appliedJobsData.applications.map((application: any) => (
+                      <div 
+                        key={application.id} 
+                        className={`flex items-center justify-between p-4 border rounded-lg ${
+                          application.status === 'FAILED' ? 'border-red-300 bg-red-50' : ''
+                        }`}
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-start gap-2">
+                            {application.status === 'FAILED' && (
+                              <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+                            )}
+                            <div className="flex-1">
+                              <h3 className="font-semibold text-lg">{application.title || 'Job Title Unavailable'}</h3>
+                              <p className="text-gray-600">{application.company || 'Company Name Unavailable'}</p>
+                              {application.status === 'FAILED' && application.notes && (
+                                <p className="text-sm text-red-600 mt-2 bg-red-100 p-2 rounded">
+                                  <span className="font-semibold">Error: </span>
+                                  {application.notes}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="h-4 w-4" />
+                                  {new Date(application.createdAt).toLocaleDateString()}
+                                </span>
+                                {application.locations && application.locations.length > 0 && (
+                                  <span className="flex items-center gap-1">
+                                    <MapPin className="h-4 w-4" />
+                                    {application.locations[0]}
+                                  </span>
+                                )}
+                                {application.salaryMin && application.salaryMax && (
+                                  <span className="flex items-center gap-1">
+                                    <DollarSign className="h-4 w-4" />
+                                    {application.salaryMin}k - {application.salaryMax}k {application.currency || 'EUR'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Badge variant={
+                            application.status === 'HIRED' ? 'default' : 
+                            application.status === 'OFFER' ? 'default' :
+                            application.status === 'TECH' || application.status === 'ONSITE' ? 'secondary' :
+                            application.status === 'SCREEN' ? 'secondary' :
+                            application.status === 'APPLIED' ? 'outline' :
+                            application.status === 'REJECTED' || application.status === 'FAILED' ? 'destructive' : 
+                            'outline'
+                          }>
+                            {application.status}
+                          </Badge>
+                          {application.url && (
+                            <Button 
+                              variant={application.status === 'FAILED' ? 'default' : 'ghost'}
+                              size="sm"
+                              onClick={() => window.open(application.url, '_blank', 'noopener noreferrer')}
+                            >
+                              <ExternalLink className="h-4 w-4 mr-1" />
+                              {application.status === 'FAILED' ? 'Retry' : 'View Job'}
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Badge variant={
-                        application.status === 'HIRED' ? 'default' : 
-                        application.status === 'OFFER' ? 'default' :
-                        application.status === 'TECH' || application.status === 'ONSITE' ? 'secondary' :
-                        application.status === 'SCREEN' ? 'secondary' :
-                        application.status === 'APPLIED' ? 'outline' :
-                        application.status === 'REJECTED' ? 'destructive' : 
-                        'outline'
-                      }>
-                        {application.status}
-                      </Badge>
-                      {application.url && (
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => window.open(application.url, '_blank', 'noopener noreferrer')}
-                        >
-                          <ExternalLink className="h-4 w-4 mr-1" />
-                          View Job
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                
-                {/* Infinite Scroll Loading Indicator */}
-                {loadingMoreApplications && (
-                  <div className="text-center py-4">
-                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-gray-400" />
-                    <p className="text-sm text-gray-500 mt-2">Loading more applications...</p>
-                  </div>
-                )}
-                
-                {/* Intersection Observer Target */}
-                <div ref={applicationsEndRef} className="h-4" />
-                
-                {/* Show end message when no more results */}
-                {!hasMoreApplications && appliedJobsData.applications.length > 0 && (
-                  <div className="text-center py-4">
-                    <p className="text-sm text-gray-500">
-                      End of applications list
+                    ))}
+                    
+                    {/* Infinite Scroll Loading Indicator */}
+                    {loadingMoreApplications && (
+                      <div className="text-center py-4">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto text-gray-400" />
+                        <p className="text-sm text-gray-500 mt-2">Loading more applications...</p>
+                      </div>
+                    )}
+                    
+                    {/* Intersection Observer Target */}
+                    <div ref={applicationsEndRef} className="h-4" />
+                    
+                    {/* Show end message when no more results */}
+                    {!hasMoreApplications && (
+                      <div className="text-center py-4">
+                        <p className="text-sm text-gray-500">
+                          End of applications list
+                        </p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-12">
+                    <ListChecks className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      {applicationsSearchTerm || applicationsStatusFilter !== 'ALL' 
+                        ? 'No matching applications found' 
+                        : 'No applications yet'}
+                    </h3>
+                    <p className="text-gray-500">
+                      {applicationsSearchTerm || applicationsStatusFilter !== 'ALL'
+                        ? 'Try adjusting your search terms or filters'
+                        : 'Start applying to jobs to track your application progress here.'
+                      }
                     </p>
                   </div>
                 )}
@@ -666,22 +735,17 @@ export default function Dashboard() {
                   <div className="text-center">
                     <ListChecks className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      {applicationsSearchTerm ? 'No matching applications found' : 'No applications yet'}
+                      No applications yet
                     </h3>
                     <p className="text-gray-500 mb-4">
-                      {applicationsSearchTerm 
-                        ? 'Try adjusting your search terms'
-                        : 'Start applying to jobs to track your application progress here.'
-                      }
+                      Start applying to jobs to track your application progress here.
                     </p>
-                    {!applicationsSearchTerm && (
-                      <Link href="/auto-apply">
-                        <Button>
-                          <Zap className="h-4 w-4 mr-2" />
-                          Start Auto Apply
-                        </Button>
-                      </Link>
-                    )}
+                    <Link href="/auto-apply">
+                      <Button>
+                        <Zap className="h-4 w-4 mr-2" />
+                        Start Auto Apply
+                      </Button>
+                    </Link>
                   </div>
                 </CardContent>
               </Card>

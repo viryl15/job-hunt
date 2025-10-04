@@ -464,7 +464,7 @@ export const db = {
   async createApplication(appData: {
     jobId: string
     userId: string
-    status?: 'LEAD' | 'APPLIED' | 'SCREEN' | 'TECH' | 'ONSITE' | 'OFFER' | 'HIRED' | 'REJECTED'
+    status?: 'LEAD' | 'APPLIED' | 'SCREEN' | 'TECH' | 'ONSITE' | 'OFFER' | 'HIRED' | 'REJECTED' | 'FAILED'
     channel?: 'EMAIL' | 'FORM' | 'REFERRAL'
     resumePath?: string
     coverText?: string
@@ -595,7 +595,7 @@ export interface Application {
   id: string
   jobId: string
   userId: string
-  status: 'LEAD' | 'APPLIED' | 'SCREEN' | 'TECH' | 'ONSITE' | 'OFFER' | 'HIRED' | 'REJECTED'
+  status: 'LEAD' | 'APPLIED' | 'SCREEN' | 'TECH' | 'ONSITE' | 'OFFER' | 'HIRED' | 'REJECTED' | 'FAILED'
   channel: 'EMAIL' | 'FORM' | 'REFERRAL'
   resumePath?: string
   coverText?: string

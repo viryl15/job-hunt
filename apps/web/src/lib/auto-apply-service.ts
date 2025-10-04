@@ -144,30 +144,30 @@ export async function runAutoApplyAutomation(configId: string, useRealAutomation
       })
 
       // Create application record in the main application table
-      if (appResult.success) {
-        const appParams: {
-          jobId: string
-          userId: string
-          status: 'APPLIED'
-          channel: 'FORM'
-          coverText?: string
-          notes: string
-          resumePath?: string
-          contactEmail?: string
-        } = {
-          jobId: jobId,
-          userId: config.userId,
-          status: 'APPLIED',
-          channel: 'FORM',
-          notes: `Auto-applied via ${config.boardName}`
-        }
-        
-        if (processedCoverLetter) {
-          appParams.coverText = processedCoverLetter
-        }
-        
-        await db.createApplication(appParams)
+      const appParams: {
+        jobId: string
+        userId: string
+        status: 'APPLIED' | 'FAILED'
+        channel: 'FORM'
+        coverText?: string
+        notes: string
+        resumePath?: string
+        contactEmail?: string
+      } = {
+        jobId: jobId,
+        userId: config.userId,
+        status: appResult.success ? 'APPLIED' : 'FAILED',
+        channel: 'FORM',
+        notes: appResult.success 
+          ? `Auto-applied via ${config.boardName}`
+          : `Failed to apply via ${config.boardName}: ${appResult.message}${appResult.error ? ` - ${appResult.error}` : ''}`
       }
+      
+      if (appResult.success && processedCoverLetter) {
+        appParams.coverText = processedCoverLetter
+      }
+      
+      await db.createApplication(appParams)
 
       // Log application attempt to application_log table (for automation tracking)
       const logParams: {
