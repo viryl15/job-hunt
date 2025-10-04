@@ -60,7 +60,8 @@ export function JobBoardConfigForm({ config, onSave, onCancel }: JobBoardConfigF
       coverLetterTemplate: config?.applicationSettings?.coverLetterTemplate || getDefaultCoverLetterTemplate(),
       useCustomTemplate: config?.applicationSettings?.useCustomTemplate !== undefined ? config.applicationSettings.useCustomTemplate : true,
       resumeUrl: config?.applicationSettings?.resumeUrl || '',
-      customMessage: config?.applicationSettings?.customMessage || ''
+      customMessage: config?.applicationSettings?.customMessage || '',
+      skillMatchThreshold: config?.applicationSettings?.skillMatchThreshold ?? 60
     },
     isActive: config?.isActive ?? true
   })
@@ -365,6 +366,48 @@ export function JobBoardConfigForm({ config, onSave, onCancel }: JobBoardConfigF
                     }
                   }))}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="skillMatchThreshold">
+                    Skill Match Threshold
+                  </Label>
+                  <span className="text-sm font-bold text-blue-600">
+                    {formData.applicationSettings.skillMatchThreshold}%
+                  </span>
+                </div>
+                <input
+                  id="skillMatchThreshold"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={formData.applicationSettings.skillMatchThreshold}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    applicationSettings: { 
+                      ...prev.applicationSettings, 
+                      skillMatchThreshold: parseInt(e.target.value) 
+                    }
+                  }))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {formData.applicationSettings.skillMatchThreshold === 0 ? (
+                    <span className="text-yellow-600">⚠️ Will apply to ALL jobs (no filtering)</span>
+                  ) : formData.applicationSettings.skillMatchThreshold <= 30 ? (
+                    <span className="text-green-600">🟢 Very lenient - will apply to most jobs</span>
+                  ) : formData.applicationSettings.skillMatchThreshold <= 60 ? (
+                    <span className="text-blue-600">🔵 Balanced - good skill match required</span>
+                  ) : formData.applicationSettings.skillMatchThreshold <= 80 ? (
+                    <span className="text-orange-600">🟠 Strict - only strong matches</span>
+                  ) : (
+                    <span className="text-red-600">🔴 Very strict - only perfect matches</span>
+                  )}
+                  <br />
+                  Jobs with less than {formData.applicationSettings.skillMatchThreshold}% skill match will be skipped.
+                </p>
               </div>
 
               <div>

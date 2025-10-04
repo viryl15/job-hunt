@@ -1442,6 +1442,65 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
     }
   }
 
+  /**
+   * Fetch full job description from job detail page
+   * This is needed for accurate skill matching before applying
+   */
+  async getJobDescription(jobUrl: string): Promise<string> {
+    if (!this.page || !this.isLoggedIn) {
+      throw new Error('Must be logged in to fetch job details')
+    }
+
+    try {
+      this.logger.info(`📄 Fetching job description from: ${jobUrl}`)
+      
+      // Navigate to job detail page
+      await this.page.goto(jobUrl, { 
+        waitUntil: 'domcontentloaded',
+        timeout: 30000 
+      })
+
+      // Wait a bit for content to load
+      await new Promise(resolve => setTimeout(resolve, 1500))
+
+      // Extract job description from the detail page
+      const description = await this.page.evaluate(() => {
+        const parts: string[] = []
+        
+        // Extract "Détail du poste" section
+        const detailSection = document.querySelector('[data-truncate-text-target="content"]')
+        if (detailSection) {
+          const text = detailSection.textContent?.trim() || ''
+          if (text) parts.push(text)
+        }
+        
+        // Extract "Le profil recherché" section (collapsed by default)
+        const profileSection = document.querySelector('#collapsed-content')
+        if (profileSection) {
+          const text = profileSection.textContent?.trim() || ''
+          if (text) parts.push(text)
+        }
+        
+        // Fallback: extract all paragraph text from main content
+        if (parts.length === 0) {
+          const paragraphs = document.querySelectorAll('.tw-typo-long-m, p')
+          paragraphs.forEach(p => {
+            const text = p.textContent?.trim() || ''
+            if (text.length > 20) parts.push(text)
+          })
+        }
+        
+        return parts.join(' ')
+      })
+
+      this.logger.success(`Extracted description: ${description.substring(0, 100)}... (${description.length} chars)`)
+      return description
+    } catch (error) {
+      this.logger.warning(`Failed to fetch job description: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      return '' // Return empty string on error, skill matching will use title only
+    }
+  }
+
   async applyToJob(jobId: string, application: ApplicationData): Promise<AutoApplicationResult> {
     if (!this.page || !this.isLoggedIn) {
       throw new Error('Must be logged in to apply to jobs')

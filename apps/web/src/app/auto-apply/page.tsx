@@ -396,6 +396,10 @@ export default function AutoApplyPage() {
                       <div className="text-xs text-gray-600">Failed</div>
                     </div>
                     <div className="text-center">
+                      <div className="text-lg font-bold text-orange-600">{automation.skippedCount || 0}</div>
+                      <div className="text-xs text-gray-600">Skipped</div>
+                    </div>
+                    <div className="text-center">
                       <div className="text-lg font-bold text-blue-600">
                         {automation.totalJobs - automation.currentJob}
                       </div>
@@ -499,6 +503,49 @@ export default function AutoApplyPage() {
                     <h4 className="font-semibold text-sm">Daily Limit</h4>
                     <p className="text-sm text-muted-foreground">
                       {config.applicationSettings.maxApplicationsPerDay} applications/day
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-100">
+                  <div>
+                    <h4 className="font-semibold text-sm">Skill Match Threshold</h4>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="flex-1 bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`h-full rounded-full ${
+                            (config.applicationSettings.skillMatchThreshold ?? 60) <= 30 ? 'bg-green-500' :
+                            (config.applicationSettings.skillMatchThreshold ?? 60) <= 60 ? 'bg-blue-500' :
+                            (config.applicationSettings.skillMatchThreshold ?? 60) <= 80 ? 'bg-orange-500' :
+                            'bg-red-500'
+                          }`}
+                          style={{ width: `${config.applicationSettings.skillMatchThreshold ?? 60}%` }}
+                        />
+                      </div>
+                      <span className="text-sm font-bold text-gray-700 min-w-[45px]">
+                        {config.applicationSettings.skillMatchThreshold ?? 60}%
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {(config.applicationSettings.skillMatchThreshold ?? 60) === 0 ? 'No filtering' :
+                       (config.applicationSettings.skillMatchThreshold ?? 60) <= 30 ? 'Very lenient' :
+                       (config.applicationSettings.skillMatchThreshold ?? 60) <= 60 ? 'Balanced' :
+                       (config.applicationSettings.skillMatchThreshold ?? 60) <= 80 ? 'Strict' :
+                       'Very strict'}
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <h4 className="font-semibold text-sm">Remote Preference</h4>
+                    <p className="text-sm text-muted-foreground capitalize">
+                      {config.preferences.remotePreference}
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <h4 className="font-semibold text-sm">Experience Level</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {config.preferences.experienceLevel}
                     </p>
                   </div>
                 </div>

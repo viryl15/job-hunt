@@ -229,13 +229,21 @@ export const db = {
       SELECT * FROM job_board_config WHERE userId = ? ORDER BY createdAt DESC
     `, [userId])
     
-    return configs.map((config: any) => ({
-      ...config,
-      credentials: JSON.parse(config.credentials),
-      preferences: JSON.parse(config.preferences),
-      applicationSettings: JSON.parse(config.applicationSettings),
-      isActive: Boolean(config.isActive)
-    }))
+    return configs.map((config: any) => {
+      const applicationSettings = JSON.parse(config.applicationSettings)
+      // Set default skill match threshold if not present
+      if (applicationSettings.skillMatchThreshold === undefined) {
+        applicationSettings.skillMatchThreshold = 60
+      }
+      
+      return {
+        ...config,
+        credentials: JSON.parse(config.credentials),
+        preferences: JSON.parse(config.preferences),
+        applicationSettings,
+        isActive: Boolean(config.isActive)
+      }
+    })
   },
 
   async getJobBoardConfig(id: string): Promise<JobBoardConfig | null> {
@@ -246,11 +254,17 @@ export const db = {
     if (configs.length === 0) return null
     
     const config = configs[0] as any
+    const applicationSettings = JSON.parse(config.applicationSettings)
+    // Set default skill match threshold if not present
+    if (applicationSettings.skillMatchThreshold === undefined) {
+      applicationSettings.skillMatchThreshold = 60
+    }
+    
     return {
       ...config,
       credentials: JSON.parse(config.credentials),
       preferences: JSON.parse(config.preferences),
-      applicationSettings: JSON.parse(config.applicationSettings),
+      applicationSettings,
       isActive: Boolean(config.isActive)
     }
   },
@@ -572,6 +586,7 @@ export interface JobBoardConfig {
     useCustomTemplate?: boolean
     resumeUrl?: string
     customMessage?: string
+    skillMatchThreshold?: number // 0-100%, default 60%. Jobs with skill match below this % are skipped
   }
   isActive: boolean
   createdAt: Date

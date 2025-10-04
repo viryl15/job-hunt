@@ -1,6 +1,7 @@
 import { db, query } from '@/lib/database'
 import { JobBoardFactory, ApplicationTemplateEngine } from '@/lib/job-board-automation'
 import type { SearchCriteria, ApplicationData, JobListing, AutoApplicationResult } from '@/lib/job-board-automation'
+import { calculateSkillMatch, formatMatchResult } from '@/lib/skill-matcher'
 
 // Type for progress callback function
 type ProgressCallback = (update: {
@@ -13,6 +14,7 @@ type ProgressCallback = (update: {
     status: 'starting' | 'running' | 'completed' | 'failed'
     successCount: number
     failCount: number
+    skippedCount?: number
   }
 }) => void
 
@@ -52,7 +54,8 @@ export async function runAutoApplyAutomation(
         currentJobTitle: 'Logging in to job board...',
         status: 'starting',
         successCount: 0,
-        failCount: 0
+        failCount: 0,
+        skippedCount: 0
       }
     })
     
@@ -74,7 +77,8 @@ export async function runAutoApplyAutomation(
         currentJobTitle: 'Searching for jobs...',
         status: 'running',
         successCount: 0,
-        failCount: 0
+        failCount: 0,
+        skippedCount: 0
       }
     })
 
@@ -107,6 +111,7 @@ export async function runAutoApplyAutomation(
 
     const applications: AutoApplicationResult[] = []
     let applicationsSubmitted = 0
+    let skippedCount = 0
   
   // Apply to jobs individually with proper template processing
   for (let i = 0; i < jobs.length && applicationsSubmitted < config.applicationSettings.maxApplicationsPerDay; i++) {
@@ -122,7 +127,8 @@ export async function runAutoApplyAutomation(
         currentJobTitle: `Processing: ${job.title} at ${job.company}`,
         status: 'running',
         successCount: applicationsSubmitted,
-        failCount: i - applicationsSubmitted
+        failCount: i - applicationsSubmitted - skippedCount,
+        skippedCount
       }
     })
     
@@ -143,9 +149,55 @@ export async function runAutoApplyAutomation(
         
         if (existingApp.length > 0) {
           console.log(`⚠️ Skipping job "${job.title}" - already applied (found in database)`)
+          skippedCount++
           continue
         }
       }
+
+      // ===== SKILL MATCHING CHECK =====
+      // Get the skill match threshold (default 60%)
+      const skillMatchThreshold = config.applicationSettings.skillMatchThreshold || 60
+      const userSkills = config.preferences.skills || []
+      
+      // Only perform skill matching if user has skills configured
+      if (userSkills.length > 0) {
+        // Fetch full job description from detail page for accurate skill matching
+        let fullDescription = job.description || ''
+        
+        // If the automator has a getJobDescription method, use it to get the full description
+        // Check if method exists (only RealHelloWorkAutomator has this method currently)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ('getJobDescription' in automator && typeof (automator as any).getJobDescription === 'function') {
+          try {
+            console.log(`🔍 Fetching full job description for skill matching...`)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            fullDescription = await (automator as any).getJobDescription(job.url)
+          } catch {
+            console.log(`⚠️ Could not fetch full description, using title only for skill matching`)
+          }
+        }
+        
+        const skillMatch = calculateSkillMatch(
+          userSkills,
+          job.title,
+          fullDescription
+        )
+        
+        console.log(`\n📊 Skill Match Analysis for "${job.title}":`)
+        console.log(formatMatchResult(skillMatch))
+        console.log(`Threshold: ${skillMatchThreshold}%\n`)
+        
+        // Skip job if skill match is below threshold
+        if (skillMatch.percentage < skillMatchThreshold) {
+          console.log(`⏭️ Skipping job "${job.title}" - skill match too low (${skillMatch.percentage}% < ${skillMatchThreshold}%)`)
+          console.log(`   Missing skills: ${skillMatch.missingSkills.join(', ')}`)
+          skippedCount++
+          continue
+        } else {
+          console.log(`✅ Skill match acceptable (${skillMatch.percentage}% >= ${skillMatchThreshold}%) - proceeding with application`)
+        }
+      }
+      // ===== END SKILL MATCHING CHECK =====
 
       // Process template for this specific job (if using custom template)
       let processedCoverLetter = ''
@@ -271,7 +323,8 @@ export async function runAutoApplyAutomation(
             : `❌ Failed: ${job.title}`,
           status: 'running',
           successCount: applicationsSubmitted,
-          failCount: applications.length - applicationsSubmitted
+          failCount: applications.length - applicationsSubmitted,
+          skippedCount
         }
       })
 
@@ -312,7 +365,8 @@ export async function runAutoApplyAutomation(
       currentJobTitle: 'Automation completed!',
       status: 'completed',
       successCount: applicationsSubmitted,
-      failCount: applications.length - applicationsSubmitted
+      failCount: applications.length - applicationsSubmitted,
+      skippedCount
     }
   })
 

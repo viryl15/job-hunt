@@ -9,6 +9,7 @@ export interface AutomationProgress {
   status: 'starting' | 'running' | 'completed' | 'failed'
   successCount: number
   failCount: number
+  skippedCount?: number
   startedAt: Date
   completedAt?: Date
 }
