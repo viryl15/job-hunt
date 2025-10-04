@@ -1,67 +1,105 @@
 import { db, query } from '@/lib/database'
 import { JobBoardFactory, ApplicationTemplateEngine } from '@/lib/job-board-automation'
 import type { SearchCriteria, ApplicationData, JobListing, AutoApplicationResult } from '@/lib/job-board-automation'
+import { initializeProgress, updateProgress, clearProgress } from '@/lib/progress-store'
 
 export async function runAutoApplyAutomation(configId: string, useRealAutomation: boolean = false) {
-  // Get job board configuration
-  const config = await db.getJobBoardConfig(configId)
-  if (!config) {
-    throw new Error('Configuration not found')
-  }
+  try {
+    // Get job board configuration
+    const config = await db.getJobBoardConfig(configId)
+    if (!config) {
+      throw new Error('Configuration not found')
+    }
 
-  if (!config.isActive) {
-    throw new Error('Configuration is not active')
-  }
+    if (!config.isActive) {
+      throw new Error('Configuration is not active')
+    }
 
-  // Get user information for template processing
-  console.log(`Looking for user with ID: ${config.userId}`)
-  const user = await db.getUserById(config.userId)
-  if (!user) {
-    throw new Error(`User not found for userId: ${config.userId}. Please make sure you're logged in and the configuration belongs to your account.`)
-  }
+    // Get user information for template processing
+    console.log(`Looking for user with ID: ${config.userId}`)
+    const user = await db.getUserById(config.userId)
+    if (!user) {
+      throw new Error(`User not found for userId: ${config.userId}. Please make sure you're logged in and the configuration belongs to your account.`)
+    }
 
-  console.log(`Starting automated application for ${config.boardName}...`)
-  console.log(`Real automation mode: ${useRealAutomation ? 'ENABLED' : 'DEMO MODE'}`)
-  
-  const automator = await JobBoardFactory.createAutomator(config, useRealAutomation)
-  
-  // Login to job board
-  const loginSuccess = await automator.login()
-  if (!loginSuccess) {
-    throw new Error('Failed to login to job board')
-  }
+    console.log(`Starting automated application for ${config.boardName}...`)
+    console.log(`Real automation mode: ${useRealAutomation ? 'ENABLED' : 'DEMO MODE'}`)
+    
+    // Initialize progress
+    updateProgress({
+      configId,
+      currentJob: 0,
+      totalJobs: 0,
+      currentJobTitle: 'Logging in to job board...',
+      status: 'starting',
+      successCount: 0,
+      failCount: 0
+    })
+    
+    const automator = await JobBoardFactory.createAutomator(config, useRealAutomation)
+    
+    // Login to job board
+    const loginSuccess = await automator.login()
+    if (!loginSuccess) {
+      throw new Error('Failed to login to job board')
+    }
 
-  // Search for jobs based on preferences
-  const searchCriteria: SearchCriteria = {
-    keywords: config.preferences.skills,
-    location: config.preferences.locations[0] || 'France',
-    salaryMin: config.preferences.salaryMin,
-    salaryMax: config.preferences.salaryMax,
-    remote: config.preferences.remotePreference === 'remote'
-  }
+    // Search for jobs based on preferences
+    updateProgress({
+      configId,
+      currentJob: 0,
+      totalJobs: 0,
+      currentJobTitle: 'Searching for jobs...',
+      status: 'running',
+      successCount: 0,
+      failCount: 0
+    })
 
-  // Check if user wants to use custom template
-  const useCustomTemplate = config.applicationSettings.useCustomTemplate !== false
-  const template = useCustomTemplate ? (config.applicationSettings.coverLetterTemplate || ApplicationTemplateEngine.getDefaultCoverLetterTemplate()) : ''
+    const searchCriteria: SearchCriteria = {
+      keywords: config.preferences.skills,
+      location: config.preferences.locations[0] || 'France',
+      salaryMin: config.preferences.salaryMin,
+      salaryMax: config.preferences.salaryMax,
+      remote: config.preferences.remotePreference === 'remote'
+    }
 
-  // Prepare user profile data for template processing
-  const userProfile = {
-    name: user.name || 'Candidat',
-    experience: config.preferences.experienceLevel || '5 ans',
-    skills: config.preferences.skills || []
-  }
+    // Check if user wants to use custom template
+    const useCustomTemplate = config.applicationSettings.useCustomTemplate !== false
+    const template = useCustomTemplate ? (config.applicationSettings.coverLetterTemplate || ApplicationTemplateEngine.getDefaultCoverLetterTemplate()) : ''
 
-  // Search for jobs first
-  const jobs = await automator.searchJobs(searchCriteria)
-  
-  console.log(`Found ${jobs.length} jobs, applying to up to ${config.applicationSettings.maxApplicationsPerDay} jobs`)
+    // Prepare user profile data for template processing
+    const userProfile = {
+      name: user.name || 'Candidat',
+      experience: config.preferences.experienceLevel || '5 ans',
+      skills: config.preferences.skills || []
+    }
 
-  const applications: AutoApplicationResult[] = []
-  let applicationsSubmitted = 0
+    // Search for jobs first
+    const jobs = await automator.searchJobs(searchCriteria)
+    
+    console.log(`Found ${jobs.length} jobs, applying to up to ${config.applicationSettings.maxApplicationsPerDay} jobs`)
+
+    // Initialize progress with total jobs count
+    const maxApplications = Math.min(jobs.length, config.applicationSettings.maxApplicationsPerDay || 10)
+    initializeProgress(configId, maxApplications)
+
+    const applications: AutoApplicationResult[] = []
+    let applicationsSubmitted = 0
   
   // Apply to jobs individually with proper template processing
   for (let i = 0; i < jobs.length && applicationsSubmitted < config.applicationSettings.maxApplicationsPerDay; i++) {
     const job = jobs[i]
+    
+    // Update progress before processing each job
+    updateProgress({
+      configId,
+      currentJob: i,
+      totalJobs: maxApplications,
+      currentJobTitle: `Processing: ${job.title} at ${job.company}`,
+      status: 'running',
+      successCount: applicationsSubmitted,
+      failCount: i - applicationsSubmitted
+    })
     
     try {
       // Check if we already applied to this job by checking if job exists in database
@@ -195,6 +233,19 @@ export async function runAutoApplyAutomation(configId: string, useRealAutomation
       }
       
       await db.logApplication(logParams)
+      
+      // Update progress after application attempt
+      updateProgress({
+        configId,
+        currentJob: i + 1,
+        totalJobs: maxApplications,
+        currentJobTitle: appResult.success 
+          ? `✅ Applied: ${job.title}` 
+          : `❌ Failed: ${job.title}`,
+        status: 'running',
+        successCount: applicationsSubmitted,
+        failCount: applications.length - applicationsSubmitted
+      })
 
       // Add random delay between 5-8 seconds before processing next job
       const delayMs = Math.floor(Math.random() * 3000) + 5000 // Random between 5000-8000ms
@@ -223,6 +274,17 @@ export async function runAutoApplyAutomation(configId: string, useRealAutomation
     }
   }
 
+  // Update progress to completed
+  updateProgress({
+    configId,
+    currentJob: maxApplications,
+    totalJobs: maxApplications,
+    currentJobTitle: 'Automation completed!',
+    status: 'completed',
+    successCount: applicationsSubmitted,
+    failCount: applications.length - applicationsSubmitted
+  })
+
   // Prepare results for response
   const results = applications.map(appResult => {
     const job = jobs.find((j: JobListing) => j.id === appResult.jobId || j.url === appResult.jobId)
@@ -237,9 +299,29 @@ export async function runAutoApplyAutomation(configId: string, useRealAutomation
 
   await automator.logout()
   
+  // Clear progress after 30 seconds
+  setTimeout(() => clearProgress(configId), 30000)
+  
   return {
     totalJobsFound: jobs.length,
     applicationsSubmitted,
     results
+  }
+  } catch (error) {
+    // Update progress to failed on error
+    if (configId) {
+      updateProgress({
+        configId,
+        currentJob: 0,
+        totalJobs: 0,
+        currentJobTitle: 'Automation failed',
+        status: 'failed',
+        successCount: 0,
+        failCount: 0
+      })
+      // Clear progress after 30 seconds
+      setTimeout(() => clearProgress(configId), 30000)
+    }
+    throw error
   }
 }

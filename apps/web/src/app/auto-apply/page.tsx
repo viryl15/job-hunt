@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { JobBoardConfigForm } from '@/components/job-board-config'
 import { JobBoardConfig } from '@/lib/database'
-import { Plus, Settings, Play, Pause, Eye, Trash2 } from 'lucide-react'
+import { Plus, Settings, Play, Pause, Eye, Trash2, Loader2 } from 'lucide-react'
 
 export default function AutoApplyPage() {
   const { data: session, status } = useSession()
@@ -17,6 +17,17 @@ export default function AutoApplyPage() {
   const [loading, setLoading] = useState(true)
   const [runningJobs, setRunningJobs] = useState<Set<string>>(new Set())
   const [useRealAutomation, setUseRealAutomation] = useState(false)
+  
+  // Progress tracking state
+  const [progress, setProgress] = useState<{
+    configId: string
+    currentJob: number
+    totalJobs: number
+    currentJobTitle: string
+    status: string
+    successCount: number
+    failCount: number
+  } | null>(null)
 
   // Get user ID from authenticated session
   const userId = session?.user?.id
@@ -98,10 +109,34 @@ export default function AutoApplyPage() {
     if (runningJobs.has(config.id)) return
 
     setRunningJobs(prev => new Set(prev).add(config.id))
+    setProgress({
+      configId: config.id,
+      currentJob: 0,
+      totalJobs: 0,
+      currentJobTitle: 'Initializing...',
+      status: 'starting',
+      successCount: 0,
+      failCount: 0
+    })
 
     try {
       console.log(`Starting automated application for ${config.boardName}...`)
       
+      // Start polling for progress
+      const progressInterval = setInterval(async () => {
+        try {
+          const progressRes = await fetch(`/api/auto-apply/progress?configId=${config.id}`)
+          if (progressRes.ok) {
+            const progressData = await progressRes.json()
+            if (progressData.success && progressData.data) {
+              setProgress(progressData.data)
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch progress:', error)
+        }
+      }, 1000) // Poll every second
+
       const response = await fetch('/api/auto-apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -111,17 +146,24 @@ export default function AutoApplyPage() {
         })
       })
 
+      clearInterval(progressInterval)
       const result = await response.json()
       
       if (result.success) {
+        setProgress(prev => prev ? { ...prev, status: 'completed' } : null)
         alert(`Automation completed! ${result.message}`)
         console.log('Automation results:', result.data)
+        
+        // Clear progress after 3 seconds
+        setTimeout(() => setProgress(null), 3000)
       } else {
         throw new Error(result.error)
       }
     } catch (error) {
       console.error('Automation failed:', error)
+      setProgress(prev => prev ? { ...prev, status: 'failed' } : null)
       alert(`Automation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      setTimeout(() => setProgress(null), 3000)
     } finally {
       setRunningJobs(prev => {
         const newSet = new Set(prev)
@@ -230,6 +272,69 @@ export default function AutoApplyPage() {
                 <p className="text-sm text-red-600 mt-1">
                   Applications cannot be undone. Use demo mode for testing.
                 </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Progress Indicator */}
+      {progress && (
+        <Card className="mb-6 border-blue-200 bg-blue-50">
+          <CardContent className="pt-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Loader2 className={`h-6 w-6 ${progress.status === 'completed' || progress.status === 'failed' ? '' : 'animate-spin'} ${progress.status === 'completed' ? 'text-green-600' : progress.status === 'failed' ? 'text-red-600' : 'text-blue-600'}`} />
+                  <div>
+                    <h3 className="font-bold text-blue-900">
+                      {progress.status === 'completed' ? '✅ Automation Completed!' :
+                       progress.status === 'failed' ? '❌ Automation Failed' :
+                       '🤖 Running Automation...'}
+                    </h3>
+                    <p className="text-sm text-blue-700">{progress.currentJobTitle}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-blue-900">
+                    {progress.totalJobs > 0 ? Math.round((progress.currentJob / progress.totalJobs) * 100) : 0}%
+                  </div>
+                  <div className="text-xs text-blue-600">
+                    {progress.currentJob} / {progress.totalJobs} jobs
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-blue-200 rounded-full h-3 overflow-hidden">
+                <div 
+                  className={`h-full transition-all duration-500 ${
+                    progress.status === 'completed' ? 'bg-green-600' :
+                    progress.status === 'failed' ? 'bg-red-600' :
+                    'bg-blue-600'
+                  }`}
+                  style={{ 
+                    width: `${progress.totalJobs > 0 ? (progress.currentJob / progress.totalJobs) * 100 : 0}%` 
+                  }}
+                />
+              </div>
+
+              {/* Stats */}
+              <div className="flex justify-around pt-2 border-t border-blue-200">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">{progress.successCount}</div>
+                  <div className="text-xs text-blue-700">Successful</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-red-600">{progress.failCount}</div>
+                  <div className="text-xs text-blue-700">Failed</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {progress.totalJobs - progress.currentJob}
+                  </div>
+                  <div className="text-xs text-blue-700">Remaining</div>
+                </div>
               </div>
             </div>
           </CardContent>
