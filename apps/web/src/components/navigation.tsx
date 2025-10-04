@@ -17,12 +17,12 @@ export function Navigation() {
   const { data: session, status } = useSession()
 
   return (
-    <nav className="border-b bg-background">
+    <nav className="border-b bg-background" suppressHydrationWarning>
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           <div className="flex items-center space-x-8">
             <Link href="/" className="text-xl font-bold">
-              🎯 JobHunt
+              JobHunt
             </Link>
             
             <div className="flex space-x-6">
@@ -30,25 +30,25 @@ export function Navigation() {
                 href="/" 
                 className="text-sm font-medium transition-colors hover:text-primary"
               >
-                🏠 Dashboard
+                Dashboard
               </Link>
               <Link 
                 href="/profile" 
                 className="text-sm font-medium transition-colors hover:text-primary"
               >
-                ⚙️ Profile
+                Profile
               </Link>
               <Link 
                 href="/jobs" 
                 className="text-sm font-medium transition-colors hover:text-primary"
               >
-                💼 Jobs
+                Jobs
               </Link>
               <Link 
                 href="/automation" 
                 className="text-sm font-medium transition-colors hover:text-primary"
               >
-                🤖 Automation
+                Automation
               </Link>
             </div>
           </div>
