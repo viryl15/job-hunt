@@ -1054,7 +1054,194 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
       // Take screenshot of results for debugging
       await this.takeScreenshot('06-search-results-detailed')
 
-      return jobs
+      // PAGINATION: Check if there are more pages and collect all jobs
+      this.logger.info('Checking for pagination...')
+      let allJobs = [...jobs]
+      let currentPage = 1
+      let hasNextPage = true
+      const maxPages = 10 // Safety limit to avoid infinite loops
+      
+      while (hasNextPage && currentPage < maxPages) {
+        // Look for next page button
+        const nextPageButton = await this.page.evaluate(() => {
+          // HelloWork uses button with name="p" for pagination
+          // Find the "next page" arrow button that's not disabled
+          const buttons = Array.from(document.querySelectorAll('button[name="p"]'))
+          
+          // The "next" button is the last button with arrow right icon
+          const nextButton = buttons.find(btn => {
+            const svg = btn.querySelector('svg use')
+            const isNextArrow = svg?.getAttribute('href')?.includes('arrow.svg#right')
+            const isDisabled = btn.hasAttribute('aria-disabled') || 
+                             btn.classList.contains('tw-pointer-events-none') ||
+                             btn.classList.contains('tw-opacity-40')
+            return isNextArrow && !isDisabled
+          })
+          
+          if (nextButton) {
+            const btnElement = nextButton as HTMLButtonElement
+            btnElement.setAttribute('data-temp-next-page', 'true')
+            const pageValue = btnElement.getAttribute('value') || ''
+            return { exists: true, value: pageValue }
+          }
+          
+          return { exists: false, value: '' }
+        })
+        
+        if (!nextPageButton.exists) {
+          this.logger.info(`No more pages found. Total pages scraped: ${currentPage}`)
+          hasNextPage = false
+          break
+        }
+        
+        currentPage++
+        this.logger.info(`📄 Navigating to page ${currentPage}...`)
+        
+        // Click the next page button
+        const nextBtn = await this.page.$('button[data-temp-next-page="true"]')
+        if (!nextBtn) {
+          this.logger.warning('Next page button disappeared')
+          hasNextPage = false
+          break
+        }
+        
+        // Human-like delay before clicking pagination
+        await humanSleep(HumanDelays.randomDelay(1000, 2000), 'Preparing to navigate to next page', this.logger)
+        
+        // Click and wait for navigation
+        await Promise.all([
+          nextBtn.click(),
+          this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {
+            this.logger.debug('Page navigation timeout, continuing anyway')
+          })
+        ])
+        
+        // Wait for page to load with human-like reading behavior
+        const pageLoadDelay = HumanDelays.pageLoadDelay()
+        await MouseMovements.simulateReading(this.page, pageLoadDelay, this.logger)
+        
+        // Take screenshot of new page
+        await this.takeScreenshot(`06-search-results-page-${currentPage}`)
+        
+        // Extract jobs from this page
+        const pageJobs = await this.page.evaluate(() => {
+          const jobElements = document.querySelectorAll(`
+            li[data-id-storage-item-id],
+            .job-item, 
+            .offre, 
+            [data-testid*="job"], 
+            .search-result,
+            article
+          `)
+          
+          console.log(`Found ${jobElements.length} job elements on page`)
+          
+          const jobs: Array<{
+            id: string;
+            title: string;
+            company: string;
+            location: string;
+            description: string;
+            url: string;
+            postedDate: Date;
+            requirements: string[];
+          }> = []
+
+          jobElements.forEach((element, index) => {
+            try {
+              const jobId = element.getAttribute('data-id-storage-item-id')
+              const linkElement = element.querySelector('a[href*="/fr-fr/emplois/"], a[href*="/emploi/"], a[href*="/offre/"]')
+              
+              let jobTitle = ''
+              const h3Element = element.querySelector('h3')
+              if (h3Element) {
+                const titleP = h3Element.querySelector('p')
+                jobTitle = titleP?.textContent?.trim() || ''
+              }
+              
+              let companyName = ''
+              if (h3Element) {
+                const paragraphs = h3Element.querySelectorAll('p')
+                if (paragraphs.length > 1) {
+                  companyName = paragraphs[1].textContent?.trim() || ''
+                }
+              }
+              
+              if (!companyName) {
+                const companyImg = element.querySelector('img[alt]')
+                if (companyImg) {
+                  companyName = companyImg.getAttribute('alt') || ''
+                }
+              }
+              
+              let location = ''
+              const locationElement = element.querySelector('[data-cy="localisationCard"]')
+              if (locationElement) {
+                location = locationElement.textContent?.trim() || ''
+              }
+              
+              let contractType = ''
+              const contractElement = element.querySelector('[data-cy="contractCard"]')
+              if (contractElement) {
+                contractType = contractElement.textContent?.trim() || ''
+              }
+              
+              let salary = ''
+              const salaryElements = element.querySelectorAll('.tw-typo-s-bold')
+              for (const el of salaryElements) {
+                const text = el.textContent?.trim() || ''
+                if (text.includes('€') || text.includes('000')) {
+                  salary = text
+                  break
+                }
+              }
+
+              let jobUrl = linkElement?.getAttribute('href') || ''
+              if (jobUrl && !jobUrl.startsWith('http')) {
+                jobUrl = 'https://www.hellowork.com' + jobUrl
+              }
+
+              const description = [contractType, salary].filter(Boolean).join(' - ')
+
+              if (jobTitle && jobUrl && jobId) {
+                jobs.push({
+                  id: jobId,
+                  title: jobTitle,
+                  company: companyName || 'Company not specified',
+                  location: location || 'Location not specified',
+                  description: description || 'No description available',
+                  url: jobUrl,
+                  postedDate: new Date(),
+                  requirements: []
+                })
+              }
+            } catch (error) {
+              console.error(`Error extracting job ${index + 1}:`, error)
+            }
+          })
+
+          return jobs
+        })
+        
+        this.logger.success(`Found ${pageJobs.length} jobs on page ${currentPage}`)
+        
+        // Add new jobs to the collection (avoid duplicates by ID)
+        const existingIds = new Set(allJobs.map(j => j.id))
+        const newJobs = pageJobs.filter(job => !existingIds.has(job.id))
+        allJobs.push(...newJobs)
+        
+        this.logger.info(`Total unique jobs collected: ${allJobs.length} (${newJobs.length} new from this page)`)
+        
+        // Safety check: if no new jobs found on this page, stop pagination
+        if (newJobs.length === 0) {
+          this.logger.warning('No new jobs found on this page, stopping pagination')
+          hasNextPage = false
+        }
+      }
+      
+      this.logger.success(`🎉 Pagination complete! Collected ${allJobs.length} total jobs from ${currentPage} page(s)`)
+
+      return allJobs
     } catch (error) {
       console.error('❌ HelloWork job search failed:', error)
       return []
