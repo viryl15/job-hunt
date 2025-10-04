@@ -1,4 +1,5 @@
 // In-memory progress store for automation tracking
+// Supports multiple concurrent automations
 interface ProgressData {
   configId: string
   currentJob: number
@@ -9,6 +10,7 @@ interface ProgressData {
   failCount: number
 }
 
+// Store multiple automations by configId
 const progressStore = new Map<string, ProgressData>()
 
 export function updateProgress(data: ProgressData) {
@@ -17,6 +19,10 @@ export function updateProgress(data: ProgressData) {
 
 export function getProgress(configId: string): ProgressData | null {
   return progressStore.get(configId) || null
+}
+
+export function getAllProgress(): ProgressData[] {
+  return Array.from(progressStore.values())
 }
 
 export function clearProgress(configId: string) {
@@ -34,3 +40,4 @@ export function initializeProgress(configId: string, totalJobs: number) {
     failCount: 0
   })
 }
+

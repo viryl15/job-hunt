@@ -1,9 +1,26 @@
 import { db, query } from '@/lib/database'
 import { JobBoardFactory, ApplicationTemplateEngine } from '@/lib/job-board-automation'
 import type { SearchCriteria, ApplicationData, JobListing, AutoApplicationResult } from '@/lib/job-board-automation'
-import { initializeProgress, updateProgress, clearProgress } from '@/lib/progress-store'
 
-export async function runAutoApplyAutomation(configId: string, useRealAutomation: boolean = false) {
+// Type for progress callback function
+type ProgressCallback = (update: {
+  type: 'progress'
+  data: {
+    configId: string
+    currentJob: number
+    totalJobs: number
+    currentJobTitle: string
+    status: 'starting' | 'running' | 'completed' | 'failed'
+    successCount: number
+    failCount: number
+  }
+}) => void
+
+export async function runAutoApplyAutomation(
+  configId: string, 
+  useRealAutomation: boolean = false,
+  onProgress?: ProgressCallback
+) {
   try {
     // Get job board configuration
     const config = await db.getJobBoardConfig(configId)
@@ -26,14 +43,17 @@ export async function runAutoApplyAutomation(configId: string, useRealAutomation
     console.log(`Real automation mode: ${useRealAutomation ? 'ENABLED' : 'DEMO MODE'}`)
     
     // Initialize progress
-    updateProgress({
-      configId,
-      currentJob: 0,
-      totalJobs: 0,
-      currentJobTitle: 'Logging in to job board...',
-      status: 'starting',
-      successCount: 0,
-      failCount: 0
+    onProgress?.({
+      type: 'progress',
+      data: {
+        configId,
+        currentJob: 0,
+        totalJobs: 0,
+        currentJobTitle: 'Logging in to job board...',
+        status: 'starting',
+        successCount: 0,
+        failCount: 0
+      }
     })
     
     const automator = await JobBoardFactory.createAutomator(config, useRealAutomation)
@@ -45,14 +65,17 @@ export async function runAutoApplyAutomation(configId: string, useRealAutomation
     }
 
     // Search for jobs based on preferences
-    updateProgress({
-      configId,
-      currentJob: 0,
-      totalJobs: 0,
-      currentJobTitle: 'Searching for jobs...',
-      status: 'running',
-      successCount: 0,
-      failCount: 0
+    onProgress?.({
+      type: 'progress',
+      data: {
+        configId,
+        currentJob: 0,
+        totalJobs: 0,
+        currentJobTitle: 'Searching for jobs...',
+        status: 'running',
+        successCount: 0,
+        failCount: 0
+      }
     })
 
     const searchCriteria: SearchCriteria = {
@@ -81,7 +104,6 @@ export async function runAutoApplyAutomation(configId: string, useRealAutomation
 
     // Initialize progress with total jobs count
     const maxApplications = Math.min(jobs.length, config.applicationSettings.maxApplicationsPerDay || 10)
-    initializeProgress(configId, maxApplications)
 
     const applications: AutoApplicationResult[] = []
     let applicationsSubmitted = 0
@@ -91,14 +113,17 @@ export async function runAutoApplyAutomation(configId: string, useRealAutomation
     const job = jobs[i]
     
     // Update progress before processing each job
-    updateProgress({
-      configId,
-      currentJob: i,
-      totalJobs: maxApplications,
-      currentJobTitle: `Processing: ${job.title} at ${job.company}`,
-      status: 'running',
-      successCount: applicationsSubmitted,
-      failCount: i - applicationsSubmitted
+    onProgress?.({
+      type: 'progress',
+      data: {
+        configId,
+        currentJob: i + 1,
+        totalJobs: maxApplications,
+        currentJobTitle: `Processing: ${job.title} at ${job.company}`,
+        status: 'running',
+        successCount: applicationsSubmitted,
+        failCount: i - applicationsSubmitted
+      }
     })
     
     try {
@@ -235,16 +260,19 @@ export async function runAutoApplyAutomation(configId: string, useRealAutomation
       await db.logApplication(logParams)
       
       // Update progress after application attempt
-      updateProgress({
-        configId,
-        currentJob: i + 1,
-        totalJobs: maxApplications,
-        currentJobTitle: appResult.success 
-          ? `✅ Applied: ${job.title}` 
-          : `❌ Failed: ${job.title}`,
-        status: 'running',
-        successCount: applicationsSubmitted,
-        failCount: applications.length - applicationsSubmitted
+      onProgress?.({
+        type: 'progress',
+        data: {
+          configId,
+          currentJob: i + 1,
+          totalJobs: maxApplications,
+          currentJobTitle: appResult.success 
+            ? `✅ Applied: ${job.title}` 
+            : `❌ Failed: ${job.title}`,
+          status: 'running',
+          successCount: applicationsSubmitted,
+          failCount: applications.length - applicationsSubmitted
+        }
       })
 
       // Add random delay between 5-8 seconds before processing next job
@@ -275,14 +303,17 @@ export async function runAutoApplyAutomation(configId: string, useRealAutomation
   }
 
   // Update progress to completed
-  updateProgress({
-    configId,
-    currentJob: maxApplications,
-    totalJobs: maxApplications,
-    currentJobTitle: 'Automation completed!',
-    status: 'completed',
-    successCount: applicationsSubmitted,
-    failCount: applications.length - applicationsSubmitted
+  onProgress?.({
+    type: 'progress',
+    data: {
+      configId,
+      currentJob: maxApplications,
+      totalJobs: maxApplications,
+      currentJobTitle: 'Automation completed!',
+      status: 'completed',
+      successCount: applicationsSubmitted,
+      failCount: applications.length - applicationsSubmitted
+    }
   })
 
   // Prepare results for response
@@ -299,9 +330,6 @@ export async function runAutoApplyAutomation(configId: string, useRealAutomation
 
   await automator.logout()
   
-  // Clear progress after 30 seconds
-  setTimeout(() => clearProgress(configId), 30000)
-  
   return {
     totalJobsFound: jobs.length,
     applicationsSubmitted,
@@ -310,17 +338,18 @@ export async function runAutoApplyAutomation(configId: string, useRealAutomation
   } catch (error) {
     // Update progress to failed on error
     if (configId) {
-      updateProgress({
-        configId,
-        currentJob: 0,
-        totalJobs: 0,
-        currentJobTitle: 'Automation failed',
-        status: 'failed',
-        successCount: 0,
-        failCount: 0
+      onProgress?.({
+        type: 'progress',
+        data: {
+          configId,
+          currentJob: 0,
+          totalJobs: 0,
+          currentJobTitle: 'Automation failed',
+          status: 'failed',
+          successCount: 0,
+          failCount: 0
+        }
       })
-      // Clear progress after 30 seconds
-      setTimeout(() => clearProgress(configId), 30000)
     }
     throw error
   }

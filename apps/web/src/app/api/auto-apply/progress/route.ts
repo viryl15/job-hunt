@@ -1,23 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProgress } from '@/lib/progress-store'
+import { getProgress, getAllProgress } from '@/lib/progress-store'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const configId = searchParams.get('configId')
     
-    if (!configId) {
-      return NextResponse.json(
-        { success: false, error: 'Configuration ID is required' },
-        { status: 400 }
-      )
+    // If configId is provided, return specific automation progress
+    if (configId) {
+      const progress = getProgress(configId)
+      return NextResponse.json({
+        success: true,
+        data: progress
+      })
     }
-
-    const progress = getProgress(configId)
     
+    // Otherwise, return all running automations
+    const allProgress = getAllProgress()
     return NextResponse.json({
       success: true,
-      data: progress
+      data: allProgress
     })
   } catch (error) {
     console.error('Failed to get progress:', error)

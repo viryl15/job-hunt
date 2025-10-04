@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { JobBoardConfigForm } from '@/components/job-board-config'
 import { JobBoardConfig } from '@/lib/database'
-import { Plus, Settings, Play, Pause, Eye, Trash2, Loader2 } from 'lucide-react'
+import { Plus, Settings, Play, Pause, Eye, Trash2, Loader2, X } from 'lucide-react'
+import { useAutomationStore } from '@/store/automation-store'
 
 export default function AutoApplyPage() {
   const { data: session, status } = useSession()
@@ -15,19 +16,20 @@ export default function AutoApplyPage() {
   const [showConfigForm, setShowConfigForm] = useState(false)
   const [editingConfig, setEditingConfig] = useState<JobBoardConfig | undefined>()
   const [loading, setLoading] = useState(true)
-  const [runningJobs, setRunningJobs] = useState<Set<string>>(new Set())
   const [useRealAutomation, setUseRealAutomation] = useState(false)
   
-  // Progress tracking state
-  const [progress, setProgress] = useState<{
-    configId: string
-    currentJob: number
-    totalJobs: number
-    currentJobTitle: string
-    status: string
-    successCount: number
-    failCount: number
-  } | null>(null)
+  // Use Zustand store for automation state
+  const { 
+    automations, 
+    startAutomation, 
+    updateAutomation,
+    completeAutomation,
+    failAutomation,
+    removeAutomation,
+    isRunning,
+    getAllAutomations,
+    getRunningCount
+  } = useAutomationStore()
 
   // Get user ID from authenticated session
   const userId = session?.user?.id
@@ -37,6 +39,17 @@ export default function AutoApplyPage() {
       loadConfigs()
     }
   }, [status, userId])
+  
+  // Request notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          console.log('Notification permission granted')
+        }
+      })
+    }
+  }, [])
 
   const loadConfigs = async () => {
     try {
@@ -106,37 +119,18 @@ export default function AutoApplyPage() {
   }
 
   const runAutomatedApplication = async (config: JobBoardConfig) => {
-    if (runningJobs.has(config.id)) return
+    if (isRunning(config.id)) {
+      alert('This automation is already running!')
+      return
+    }
 
-    setRunningJobs(prev => new Set(prev).add(config.id))
-    setProgress({
-      configId: config.id,
-      currentJob: 0,
-      totalJobs: 0,
-      currentJobTitle: 'Initializing...',
-      status: 'starting',
-      successCount: 0,
-      failCount: 0
-    })
+    // Start automation in store (initialize UI state)
+    startAutomation(config.id, config.boardName)
 
     try {
       console.log(`Starting automated application for ${config.boardName}...`)
       
-      // Start polling for progress
-      const progressInterval = setInterval(async () => {
-        try {
-          const progressRes = await fetch(`/api/auto-apply/progress?configId=${config.id}`)
-          if (progressRes.ok) {
-            const progressData = await progressRes.json()
-            if (progressData.success && progressData.data) {
-              setProgress(progressData.data)
-            }
-          }
-        } catch (error) {
-          console.error('Failed to fetch progress:', error)
-        }
-      }, 1000) // Poll every second
-
+      // Connect to SSE endpoint for real-time progress updates
       const response = await fetch('/api/auto-apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -146,30 +140,56 @@ export default function AutoApplyPage() {
         })
       })
 
-      clearInterval(progressInterval)
-      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      // Read SSE stream
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
       
-      if (result.success) {
-        setProgress(prev => prev ? { ...prev, status: 'completed' } : null)
-        alert(`Automation completed! ${result.message}`)
-        console.log('Automation results:', result.data)
+      if (!reader) {
+        throw new Error('No response body')
+      }
+
+      while (true) {
+        const { done, value } = await reader.read()
         
-        // Clear progress after 3 seconds
-        setTimeout(() => setProgress(null), 3000)
-      } else {
-        throw new Error(result.error)
+        if (done) break
+        
+        // Decode the chunk
+        const chunk = decoder.decode(value, { stream: true })
+        
+        // Split by lines (SSE format)
+        const lines = chunk.split('\n')
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.substring(6))
+              
+              if (data.type === 'progress') {
+                // Update Zustand store with real-time progress
+                updateAutomation(config.id, data.data)
+              } else if (data.type === 'complete') {
+                // Mark as completed
+                completeAutomation(config.id)
+                console.log('Automation completed:', data.data)
+              } else if (data.type === 'error') {
+                // Mark as failed
+                failAutomation(config.id, data.error)
+                console.error('Automation failed:', data.error)
+              }
+            } catch (e) {
+              console.error('Failed to parse SSE data:', e)
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('Automation failed:', error)
-      setProgress(prev => prev ? { ...prev, status: 'failed' } : null)
-      alert(`Automation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-      setTimeout(() => setProgress(null), 3000)
-    } finally {
-      setRunningJobs(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(config.id)
-        return newSet
-      })
+      failAutomation(config.id, error instanceof Error ? error.message : 'Unknown error')
+      alert(`❌ Automation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -278,67 +298,125 @@ export default function AutoApplyPage() {
         </Card>
       )}
 
-      {/* Progress Indicator */}
-      {progress && (
-        <Card className="mb-6 border-blue-200 bg-blue-50">
-          <CardContent className="pt-6">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Loader2 className={`h-6 w-6 ${progress.status === 'completed' || progress.status === 'failed' ? '' : 'animate-spin'} ${progress.status === 'completed' ? 'text-green-600' : progress.status === 'failed' ? 'text-red-600' : 'text-blue-600'}`} />
-                  <div>
-                    <h3 className="font-bold text-blue-900">
-                      {progress.status === 'completed' ? '✅ Automation Completed!' :
-                       progress.status === 'failed' ? '❌ Automation Failed' :
-                       '🤖 Running Automation...'}
-                    </h3>
-                    <p className="text-sm text-blue-700">{progress.currentJobTitle}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-blue-900">
-                    {progress.totalJobs > 0 ? Math.round((progress.currentJob / progress.totalJobs) * 100) : 0}%
-                  </div>
-                  <div className="text-xs text-blue-600">
-                    {progress.currentJob} / {progress.totalJobs} jobs
-                  </div>
-                </div>
-              </div>
+      {/* Multiple Automation Progress Indicators */}
+      {getAllAutomations().length > 0 && (
+        <div className="mb-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">
+              Running Automations ({getRunningCount()})
+            </h3>
+            {getAllAutomations().some(a => a.status === 'completed' || a.status === 'failed') && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  getAllAutomations().forEach(a => {
+                    if (a.status === 'completed' || a.status === 'failed') {
+                      removeAutomation(a.configId)
+                    }
+                  })
+                }}
+              >
+                Clear Completed
+              </Button>
+            )}
+          </div>
 
-              {/* Progress Bar */}
-              <div className="w-full bg-blue-200 rounded-full h-3 overflow-hidden">
-                <div 
-                  className={`h-full transition-all duration-500 ${
-                    progress.status === 'completed' ? 'bg-green-600' :
-                    progress.status === 'failed' ? 'bg-red-600' :
-                    'bg-blue-600'
-                  }`}
-                  style={{ 
-                    width: `${progress.totalJobs > 0 ? (progress.currentJob / progress.totalJobs) * 100 : 0}%` 
-                  }}
-                />
-              </div>
-
-              {/* Stats */}
-              <div className="flex justify-around pt-2 border-t border-blue-200">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">{progress.successCount}</div>
-                  <div className="text-xs text-blue-700">Successful</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-red-600">{progress.failCount}</div>
-                  <div className="text-xs text-blue-700">Failed</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {progress.totalJobs - progress.currentJob}
+          {getAllAutomations().map((automation) => (
+            <Card 
+              key={automation.configId} 
+              className={`${
+                automation.status === 'completed' ? 'border-green-200 bg-green-50' :
+                automation.status === 'failed' ? 'border-red-200 bg-red-50' :
+                'border-blue-200 bg-blue-50'
+              }`}
+            >
+              <CardContent className="pt-6">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 flex-1">
+                      <Loader2 className={`h-6 w-6 ${
+                        automation.status === 'completed' || automation.status === 'failed' ? '' : 'animate-spin'
+                      } ${
+                        automation.status === 'completed' ? 'text-green-600' : 
+                        automation.status === 'failed' ? 'text-red-600' : 
+                        'text-blue-600'
+                      }`} />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold">
+                            {automation.configName}
+                          </h4>
+                          <Badge variant={
+                            automation.status === 'completed' ? 'default' : 
+                            automation.status === 'failed' ? 'destructive' : 
+                            'secondary'
+                          }>
+                            {automation.status === 'completed' ? '✅ Completed' :
+                             automation.status === 'failed' ? '❌ Failed' :
+                             automation.status === 'running' ? '🔄 Running' :
+                             '⏳ Starting'}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-gray-700 mt-1">{automation.currentJobTitle}</p>
+                      </div>
+                    </div>
+                    <div className="text-right ml-4">
+                      <div className="text-2xl font-bold">
+                        {automation.totalJobs > 0 ? Math.round((automation.currentJob / automation.totalJobs) * 100) : 0}%
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        {automation.currentJob} / {automation.totalJobs} jobs
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-xs text-blue-700">Remaining</div>
+
+                  {/* Progress Bar */}
+                  <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-500 ${
+                        automation.status === 'completed' ? 'bg-green-600' :
+                        automation.status === 'failed' ? 'bg-red-600' :
+                        'bg-blue-600'
+                      }`}
+                      style={{ 
+                        width: `${automation.totalJobs > 0 ? (automation.currentJob / automation.totalJobs) * 100 : 0}%` 
+                      }}
+                    />
+                  </div>
+
+                  {/* Stats */}
+                  <div className="flex justify-around pt-2 border-t border-gray-200">
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-green-600">{automation.successCount}</div>
+                      <div className="text-xs text-gray-600">Successful</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-red-600">{automation.failCount}</div>
+                      <div className="text-xs text-gray-600">Failed</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-blue-600">
+                        {automation.totalJobs - automation.currentJob}
+                      </div>
+                      <div className="text-xs text-gray-600">Remaining</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-gray-500">
+                        Started: {new Date(automation.startedAt).toLocaleTimeString()}
+                      </div>
+                      {automation.completedAt && (
+                        <div className="text-xs text-gray-500">
+                          Completed: {new Date(automation.completedAt).toLocaleTimeString()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       )}
 
       {loading ? (
@@ -436,11 +514,14 @@ export default function AutoApplyPage() {
                   </Button>
                   <Button
                     size="sm"
-                    disabled={!config.isActive || runningJobs.has(config.id)}
+                    disabled={!config.isActive || isRunning(config.id)}
                     onClick={() => runAutomatedApplication(config)}
                   >
-                    {runningJobs.has(config.id) ? (
-                      'Running...'
+                    {isRunning(config.id) ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Running...
+                      </>
                     ) : (
                       <>
                         <Play className="w-4 h-4 mr-2" />

@@ -870,11 +870,39 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
         location
       })
       
-      // Navigate directly to search results page
-      await this.page.goto(searchUrlWithParams, { 
-        waitUntil: 'networkidle2',
-        timeout: 30000 
-      })
+      // Navigate directly to search results page with retry logic
+      let navigationSuccess = false
+      let lastError: Error | null = null
+      
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          this.logger.info(`🔄 Attempting to load search page (attempt ${attempt}/3)`)
+          
+          await this.page.goto(searchUrlWithParams, { 
+            waitUntil: 'domcontentloaded', // Less strict than networkidle2
+            timeout: 60000 // Increased to 60 seconds
+          })
+          
+          // Wait a bit for dynamic content to load
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          
+          navigationSuccess = true
+          this.logger.info('✅ Search page loaded successfully')
+          break
+        } catch (error) {
+          lastError = error as Error
+          this.logger.info(`⚠️ Navigation attempt ${attempt} failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+          
+          if (attempt < 3) {
+            this.logger.info('⏳ Waiting 3 seconds before retrying...')
+            await new Promise(resolve => setTimeout(resolve, 3000))
+          }
+        }
+      }
+      
+      if (!navigationSuccess) {
+        throw new Error(`Failed to load search page after 3 attempts. Last error: ${lastError?.message}`)
+      }
 
       // Handle cookie consent modal if it appears on search page too
       await this.handleCookieConsent()
