@@ -1539,6 +1539,43 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
       // Take screenshot of job detail page
       await this.takeScreenshot('07-job-detail-page')
 
+      // CHECK: Detect if job redirects to external recruiter site
+      this.logger.info('Checking if job requires external application')
+      const externalRecruiterButton = await this.page.evaluate(() => {
+        // Look for the external recruiter button
+        const externalButtons = Array.from(document.querySelectorAll('button[data-cy="applyButton"]'))
+        
+        for (const button of externalButtons) {
+          const buttonText = button.textContent?.trim() || ''
+          const redirectUrl = button.getAttribute('data-redirect-external-url-value')
+          
+          // Check if button text contains "site du recruteur" or has external redirect URL
+          if (buttonText.toLowerCase().includes('site du recruteur') || 
+              buttonText.toLowerCase().includes('site externe') ||
+              redirectUrl?.includes('redirectionexterne')) {
+            return {
+              isExternal: true,
+              buttonText,
+              redirectUrl: redirectUrl || ''
+            }
+          }
+        }
+        
+        return { isExternal: false, buttonText: '', redirectUrl: '' }
+      })
+
+      if (externalRecruiterButton.isExternal) {
+        this.logger.warning(`⚠️ Job requires external application: "${externalRecruiterButton.buttonText}"`)
+        this.logger.info(`External URL: ${externalRecruiterButton.redirectUrl}`)
+        
+        return {
+          success: false,
+          jobId,
+          message: 'External recruiter application required',
+          error: `This job requires applying on the recruiter's website. Button: "${externalRecruiterButton.buttonText}". HelloWork does not support direct application for this job.`
+        }
+      }
+
       // STEP 1: Find and click the first "Postuler" button to navigate to application form
       this.logger.info('Looking for navigation apply button (first button)')
       const navigationButtonSelectors = [

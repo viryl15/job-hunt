@@ -25,6 +25,8 @@ export interface SkillMatchResult {
  */
 const SKILL_SYNONYMS: Record<string, string[]> = {
   'JavaScript': ['JS', 'javascript', 'ECMAScript', 'ES6', 'ES2015', 'ES2020'],
+  'Laravel': ['laravel'],
+  'Symfony': ['symfony'],
   'TypeScript': ['TS', 'typescript'],
   'React': ['ReactJS', 'React.js', 'react'],
   'React Native': ['ReactNative', 'react-native'],
@@ -51,7 +53,7 @@ const SKILL_SYNONYMS: Record<string, string[]> = {
   'REST': ['REST API', 'RESTful', 'restful', 'rest-api'],
   'GraphQL': ['graphql', 'graph-ql', 'gql'],
   'Python': ['python', 'py'],
-  'Java': ['java'],
+  'Java': ['java'],  // NOTE: Do NOT include JavaScript here - they are different!
   'C++': ['cpp', 'c plus plus', 'cplusplus'],
   'C#': ['csharp', 'c sharp', 'C Sharp', '.NET', 'dotnet'],
   'PHP': ['php'],
@@ -77,6 +79,18 @@ const SKILL_SYNONYMS: Record<string, string[]> = {
 }
 
 /**
+ * Skills that should NOT match each other (conflicting technologies)
+ * When checking for skill A, if skill B is in this list, A should NOT match B
+ */
+const CONFLICTING_SKILLS: Record<string, string[]> = {
+  'Java': ['JavaScript', 'JS', 'javascript', 'TypeScript', 'TS'],
+  'JavaScript': ['Java', 'java'],
+  'TypeScript': ['Java', 'java'],
+  'Node': ['Java', 'java'],
+  'Node.js': ['Java', 'java'],
+}
+
+/**
  * Normalize a text string for comparison
  * Converts to lowercase and removes special characters
  */
@@ -94,6 +108,19 @@ function findSkillInText(
 ): { found: boolean; matchType: 'exact' | 'partial' | 'synonym' | 'none'; foundAs?: string } {
   const normalizedJobText = normalizeText(jobText)
   const normalizedSkill = normalizeText(skill)
+
+  // Check if this skill has conflicting skills that should be excluded
+  const conflictingSkills = CONFLICTING_SKILLS[skill] || []
+  
+  // If any conflicting skill is found in the text, don't match this skill
+  for (const conflictingSkill of conflictingSkills) {
+    const conflictRegex = new RegExp(`\\b${escapeRegex(normalizeText(conflictingSkill))}\\b`, 'i')
+    if (conflictRegex.test(normalizedJobText)) {
+      // Found a conflicting skill, so this skill should NOT match
+      // Example: User has "JavaScript" but job mentions "Java" - don't match JavaScript
+      return { found: false, matchType: 'none' }
+    }
+  }
 
   // Check for exact match (whole word)
   const exactRegex = new RegExp(`\\b${escapeRegex(normalizedSkill)}\\b`, 'i')
@@ -117,10 +144,11 @@ function findSkillInText(
     }
   }
 
-  // Check for partial match (skill appears as part of a larger word)
-  if (normalizedJobText.includes(normalizedSkill)) {
-    return { found: true, matchType: 'partial', foundAs: skill }
-  }
+  // REMOVED: Partial matching is too prone to false positives
+  // Example: "java" would match "javascript" which is wrong
+  // if (normalizedJobText.includes(normalizedSkill)) {
+  //   return { found: true, matchType: 'partial', foundAs: skill }
+  // }
 
   return { found: false, matchType: 'none' }
 }
