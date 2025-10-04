@@ -1593,10 +1593,14 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
           if (application.phone) {
             try {
               const phoneSelectors = [
-                'input#sav2_field1',
-                'input[name="sav2_field1"]',
-                'input[type="tel"]',
-                'input[inputmode="numeric"][maxlength="10"]'
+                'input[pattern="[0-9]+"][maxlength="10"][minlength="10"]', // Most specific - phone pattern with 10 digits
+                'input[placeholder*="téléphone"][pattern="[0-9]+"]', // Phone placeholder with pattern
+                'input[placeholder*="telephone"][pattern="[0-9]+"]', // Alternative spelling
+                'input[pattern="[0-9]+"][inputmode="numeric"]', // Numeric pattern with inputmode
+                'input[type="tel"][pattern="[0-9]+"]', // Tel type with pattern
+                'input[placeholder*="téléphone"]', // Fallback to placeholder only
+                'input[placeholder*="telephone"]',
+                'input[type="tel"]'
               ]
               
               for (const phoneSelector of phoneSelectors) {
@@ -1618,25 +1622,26 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
             this.logger.warning('No phone number provided in application data')
           }
           
-          // Address field (if present and provided)
+          // Postal code / Address field (if present and provided)
           if (application.address) {
             try {
               const addressSelectors = [
-                'input#sav2_field2',
-                'input[name="sav2_field2"]',
-                'input[name="Address"]',
-                'input[placeholder*="adresse"]'
+                'input[placeholder*="code postal"][maxlength="5"]', // Postal code with 5 digit limit
+                'input[placeholder*="postal"][maxlength="5"]', // Alternative postal placeholder
+                'input[placeholder*="adresse"]', // Address placeholder
+                'input[placeholder*="address"]', // Alternative spelling
+                'input[name="Address"]'
               ]
               
               for (const addressSelector of addressSelectors) {
                 const addressField = await this.page.$(addressSelector)
                 if (addressField) {
-                  this.logger.debug(`Found address field: ${addressSelector}`)
+                  this.logger.debug(`Found address/postal field: ${addressSelector}`)
                   
                   await addressField.click()
                   await humanSleep(HumanDelays.randomDelay(300, 600))
                   await addressField.type(application.address, { delay: HumanDelays.randomDelay(50, 150) })
-                  this.logger.success(`Address filled: ${application.address}`)
+                  this.logger.success(`Address/postal code filled: ${application.address}`)
                   break
                 }
               }
