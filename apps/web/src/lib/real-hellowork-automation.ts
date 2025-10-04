@@ -1,6 +1,6 @@
 // Real HelloWork automation using Puppeteer for actual job applications
 import puppeteer, { Browser, Page } from 'puppeteer'
-import { JobBoardConfig } from './database'
+import { JobBoardConfig, query } from './database'
 import { 
   JobBoardAutomator, 
   SearchCriteria, 
@@ -1886,6 +1886,39 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
   }
 
   /**
+   * Check if a job has already been applied to by checking the database
+   * @param jobId - The job ID from the job board (sourceId)
+   * @param userId - The user ID
+   * @param source - The job board name (e.g., 'HelloWork')
+   * @returns true if already applied, false otherwise
+   */
+  private async hasAlreadyApplied(jobId: string, userId: string, source: string): Promise<boolean> {
+    try {
+      // Check if job exists in database with same source and sourceId
+      const existingJob = await query(
+        'SELECT id FROM job WHERE source = ? AND sourceId = ?',
+        [source, jobId]
+      )
+
+      if (existingJob.length > 0) {
+        // Check if we have an application for this job
+        const existingApp = await query(
+          'SELECT id FROM application WHERE jobId = ? AND userId = ?',
+          [existingJob[0].id, userId]
+        )
+        
+        return existingApp.length > 0
+      }
+      
+      return false
+    } catch (error) {
+      this.logger.warning('Error checking existing application', { error })
+      // If database check fails, proceed with caution (don't apply)
+      return false
+    }
+  }
+
+  /**
    * Automated job search and application workflow
    */
   async searchAndApplyToJobs(criteria: SearchCriteria, application: ApplicationData): Promise<{
@@ -1915,20 +1948,34 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
         const jobs = await this.searchJobs(singleSkillCriteria)
         console.log(`   Found ${jobs.length} jobs for "${skill}"`)
         
-        // Add only new jobs (deduplicate by ID)
+        // Add only new jobs (deduplicate by ID and check database for existing applications)
         let newJobsCount = 0
+        let alreadyAppliedCount = 0
+        
         for (const job of jobs) {
           if (!jobIds.has(job.id)) {
-            jobIds.add(job.id)
-            allJobs.push(job)
-            newJobsCount++
+            // Check if we've already applied to this job in the database
+            const alreadyApplied = await this.hasAlreadyApplied(job.id, this.config.userId, this.config.boardName)
+            
+            if (alreadyApplied) {
+              this.logger.debug(`Skipping "${job.title}" - already applied (found in database)`)
+              alreadyAppliedCount++
+            } else {
+              jobIds.add(job.id)
+              allJobs.push(job)
+              newJobsCount++
+            }
           }
         }
         
         if (newJobsCount > 0) {
           console.log(`   ✅ Added ${newJobsCount} new unique jobs`)
-        } else {
-          console.log(`   ⏭️  No new jobs (all were duplicates)`)
+        }
+        if (alreadyAppliedCount > 0) {
+          console.log(`   ⏭️  Skipped ${alreadyAppliedCount} jobs (already applied)`)
+        }
+        if (newJobsCount === 0 && alreadyAppliedCount === 0) {
+          console.log(`   ⏭️  No new jobs (all were duplicates from other skills)`)
         }
         
         // Add delay between skill searches to appear human-like
@@ -1947,6 +1994,7 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
     console.log(`\n📋 Total unique jobs found across all skills: ${allJobs.length}`)
     
     if (allJobs.length === 0) {
+      console.log('ℹ️  No new jobs to apply to (all jobs either duplicates or already applied)')
       return { searchResults: [], applications: [] }
     }
     
