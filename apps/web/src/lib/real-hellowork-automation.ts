@@ -840,8 +840,52 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
     try {
       this.logger.info('🔍 Searching for jobs on HelloWork', criteria)
       
-      // Build HelloWork search URL with proper parameters based on your discovery
-      // Use only the first keyword for more focused results (search skill by skill)
+      // If multiple keywords provided, search each one individually and merge results
+      if (criteria.keywords.length > 1) {
+        this.logger.info(`📚 Searching for ${criteria.keywords.length} skills individually and merging results...`)
+        
+        const allJobs: JobListing[] = []
+        const jobIdSet = new Set<string>() // Track unique job IDs across all skill searches
+        const maxSkills = 5 // Limit to avoid excessive searches
+        
+        for (let i = 0; i < Math.min(criteria.keywords.length, maxSkills); i++) {
+          const skill = criteria.keywords[i]
+          this.logger.info(`🔍 [${i + 1}/${Math.min(criteria.keywords.length, maxSkills)}] Searching for: "${skill}"`)
+          
+          try {
+            // Search with single skill
+            const singleSkillCriteria: SearchCriteria = {
+              ...criteria,
+              keywords: [skill]
+            }
+            
+            const skillJobs = await this.searchJobs(singleSkillCriteria)
+            
+            // Add only unique jobs
+            const newJobs = skillJobs.filter(job => !jobIdSet.has(job.id))
+            newJobs.forEach(job => jobIdSet.add(job.id))
+            allJobs.push(...newJobs)
+            
+            this.logger.success(`   Found ${skillJobs.length} jobs for "${skill}" (${newJobs.length} new unique jobs)`)
+            
+            // Human-like delay between skill searches
+            if (i < Math.min(criteria.keywords.length, maxSkills) - 1) {
+              const delay = Math.random() * 3000 + 2000 // 2-5 seconds
+              this.logger.debug(`   Waiting ${Math.round(delay/1000)}s before next skill search...`)
+              await new Promise(resolve => setTimeout(resolve, delay))
+            }
+            
+          } catch (error) {
+            this.logger.error(`   Failed to search for skill "${skill}":`, error)
+            // Continue with other skills
+          }
+        }
+        
+        this.logger.success(`🎉 Collected ${allJobs.length} unique jobs across ${Math.min(criteria.keywords.length, maxSkills)} skills`)
+        return allJobs
+      }
+      
+      // Single keyword search - proceed with standard flow
       const searchKeyword = criteria.keywords[0] || ''
       const location = (criteria.location || 'france').toLowerCase()
       
@@ -1085,6 +1129,7 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
       // PAGINATION: Check if there are more pages and collect all jobs
       this.logger.info('Checking for pagination...')
       let allJobs = [...jobs]
+      const jobIdSet = new Set(jobs.map(j => j.id)) // Use Set to track unique job IDs across pagination
       let currentPage = 1
       let hasNextPage = true
       const maxPages = 10 // Safety limit to avoid infinite loops
@@ -1253,9 +1298,12 @@ export class RealHelloWorkAutomator extends JobBoardAutomator {
         
         this.logger.success(`Found ${pageJobs.length} jobs on page ${currentPage}`)
         
-        // Add new jobs to the collection (avoid duplicates by ID)
-        const existingIds = new Set(allJobs.map(j => j.id))
-        const newJobs = pageJobs.filter(job => !existingIds.has(job.id))
+        // Add new jobs to the collection using Set for efficient duplicate checking
+        const newJobs = pageJobs.filter(job => !jobIdSet.has(job.id))
+        
+        // Add new job IDs to the Set
+        newJobs.forEach(job => jobIdSet.add(job.id))
+        
         allJobs.push(...newJobs)
         
         this.logger.info(`Total unique jobs collected: ${allJobs.length} (${newJobs.length} new from this page)`)

@@ -356,7 +356,7 @@ export function JobBoardConfigForm({ config, onSave, onCancel }: JobBoardConfigF
                   id="maxApplications"
                   type="number"
                   min="1"
-                  max="200"
+                  max="500"
                   value={formData.applicationSettings.maxApplicationsPerDay}
                   onChange={(e) => setFormData(prev => ({
                     ...prev,
