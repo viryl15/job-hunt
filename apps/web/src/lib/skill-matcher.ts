@@ -76,6 +76,11 @@ const SKILL_SYNONYMS: Record<string, string[]> = {
   'Babel': ['babel'],
   'ESLint': ['eslint', 'ES Lint'],
   'Prettier': ['prettier'],
+  'Flutter': ['flutter'],
+    'Dart': ['dart'],
+    'FullStack': ['full stack', 'full-stack', 'fullstack'],
+    'Backend': ['back end', 'back-end', 'backend'],
+    'Frontend': ['front end', 'front-end', 'frontend'],
 }
 
 /**

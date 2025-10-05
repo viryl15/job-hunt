@@ -61,12 +61,14 @@ export function JobBoardConfigForm({ config, onSave, onCancel }: JobBoardConfigF
       useCustomTemplate: config?.applicationSettings?.useCustomTemplate !== undefined ? config.applicationSettings.useCustomTemplate : true,
       resumeUrl: config?.applicationSettings?.resumeUrl || '',
       customMessage: config?.applicationSettings?.customMessage || '',
-      skillMatchThreshold: config?.applicationSettings?.skillMatchThreshold ?? 60
+      skillMatchThreshold: config?.applicationSettings?.skillMatchThreshold ?? 60,
+      blacklistKeywords: config?.applicationSettings?.blacklistKeywords || []
     },
     isActive: config?.isActive ?? true
   })
 
   const [newSkill, setNewSkill] = useState('')
+  const [newBlacklistKeyword, setNewBlacklistKeyword] = useState('')
   const [testConnection, setTestConnection] = useState(false)
 
   const supportedBoards = [
@@ -103,6 +105,29 @@ export function JobBoardConfigForm({ config, onSave, onCancel }: JobBoardConfigF
       preferences: {
         ...prev.preferences,
         skills: prev.preferences.skills.filter(s => s !== skill)
+      }
+    }))
+  }
+
+  const addBlacklistKeyword = () => {
+    if (newBlacklistKeyword.trim() && !formData.applicationSettings.blacklistKeywords.includes(newBlacklistKeyword.trim())) {
+      setFormData(prev => ({
+        ...prev,
+        applicationSettings: {
+          ...prev.applicationSettings,
+          blacklistKeywords: [...prev.applicationSettings.blacklistKeywords, newBlacklistKeyword.trim()]
+        }
+      }))
+      setNewBlacklistKeyword('')
+    }
+  }
+
+  const removeBlacklistKeyword = (keyword: string) => {
+    setFormData(prev => ({
+      ...prev,
+      applicationSettings: {
+        ...prev.applicationSettings,
+        blacklistKeywords: prev.applicationSettings.blacklistKeywords.filter(k => k !== keyword)
       }
     }))
   }
@@ -356,7 +381,7 @@ export function JobBoardConfigForm({ config, onSave, onCancel }: JobBoardConfigF
                   id="maxApplications"
                   type="number"
                   min="1"
-                  max="500"
+                  max="1000"
                   value={formData.applicationSettings.maxApplicationsPerDay}
                   onChange={(e) => setFormData(prev => ({
                     ...prev,
@@ -407,6 +432,39 @@ export function JobBoardConfigForm({ config, onSave, onCancel }: JobBoardConfigF
                   )}
                   <br />
                   Jobs with less than {formData.applicationSettings.skillMatchThreshold}% skill match will be skipped.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Blacklist Keywords (Optional)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={newBlacklistKeyword}
+                    onChange={(e) => setNewBlacklistKeyword(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addBlacklistKeyword())}
+                    placeholder="e.g., senior only, management, 10+ years"
+                  />
+                  <Button type="button" onClick={addBlacklistKeyword}>Add</Button>
+                </div>
+                {formData.applicationSettings.blacklistKeywords.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {formData.applicationSettings.blacklistKeywords.map(keyword => (
+                      <Badge key={keyword} variant="destructive" className="flex items-center gap-1">
+                        {keyword}
+                        <button
+                          type="button"
+                          onClick={() => removeBlacklistKeyword(keyword)}
+                          className="ml-1 hover:text-white"
+                        >
+                          ×
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  🚫 Jobs containing these keywords in title or description will be automatically skipped.
+                  Examples: &quot;senior only&quot;, &quot;management&quot;, &quot;10+ years experience&quot;, &quot;lead&quot;
                 </p>
               </div>
 

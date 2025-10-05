@@ -7,7 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "db:migrate": "npx tsx src/lib/migrations/migrate.ts",
+    "db:migrate:force": "npx tsx src/lib/migrations/migrate.ts force",
+    "db:status": "npx tsx src/lib/migrations/migrate.ts status",
+    "db:setup": "npx tsx src/lib/migrations/setup.ts",
+    "db:setup:fresh": "npx tsx src/lib/migrations/setup.ts --fresh",
+    "db:setup:seed": "npx tsx src/lib/migrations/setup.ts --seed",
+    "db:reset": "npx tsx src/lib/migrations/setup.ts --fresh --seed"
   },
   "dependencies": {
     "@next-auth/prisma-adapter": "^1.0.7",

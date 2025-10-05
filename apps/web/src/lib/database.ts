@@ -235,6 +235,10 @@ export const db = {
       if (applicationSettings.skillMatchThreshold === undefined) {
         applicationSettings.skillMatchThreshold = 60
       }
+      // Set default blacklist keywords if not present
+      if (applicationSettings.blacklistKeywords === undefined) {
+        applicationSettings.blacklistKeywords = []
+      }
       
       return {
         ...config,
@@ -258,6 +262,10 @@ export const db = {
     // Set default skill match threshold if not present
     if (applicationSettings.skillMatchThreshold === undefined) {
       applicationSettings.skillMatchThreshold = 60
+    }
+    // Set default blacklist keywords if not present
+    if (applicationSettings.blacklistKeywords === undefined) {
+      applicationSettings.blacklistKeywords = []
     }
     
     return {
@@ -587,6 +595,7 @@ export interface JobBoardConfig {
     resumeUrl?: string
     customMessage?: string
     skillMatchThreshold?: number // 0-100%, default 60%. Jobs with skill match below this % are skipped
+    blacklistKeywords?: string[] // Keywords to avoid in job title/description (e.g., 'senior only', 'management')
   }
   isActive: boolean
   createdAt: Date

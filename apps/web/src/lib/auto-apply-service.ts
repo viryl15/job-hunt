@@ -2,6 +2,7 @@ import { db, query } from '@/lib/database'
 import { JobBoardFactory, ApplicationTemplateEngine } from '@/lib/job-board-automation'
 import type { SearchCriteria, ApplicationData, JobListing, AutoApplicationResult } from '@/lib/job-board-automation'
 import { calculateSkillMatch, formatMatchResult } from '@/lib/skill-matcher'
+import { checkBlacklistedKeywords, formatBlacklistResult } from '@/lib/blacklist-checker'
 
 // Type for progress callback function
 type ProgressCallback = (update: {
@@ -198,6 +199,45 @@ export async function runAutoApplyAutomation(
         }
       }
       // ===== END SKILL MATCHING CHECK =====
+
+      // ===== BLACKLIST KEYWORDS CHECK =====
+      const blacklistKeywords = config.applicationSettings.blacklistKeywords || []
+      
+      if (blacklistKeywords.length > 0) {
+        // Fetch full job description if not already fetched
+        let fullDescription = job.description || ''
+        
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ('getJobDescription' in automator && typeof (automator as any).getJobDescription === 'function') {
+          try {
+            if (!fullDescription || fullDescription.length < 100) {
+              console.log(`🔍 Fetching full job description for blacklist checking...`)
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              fullDescription = await (automator as any).getJobDescription(job.url)
+            }
+          } catch {
+            console.log(`⚠️ Could not fetch full description, using available text for blacklist check`)
+          }
+        }
+        
+        const blacklistCheck = checkBlacklistedKeywords(
+          job.title,
+          fullDescription,
+          blacklistKeywords
+        )
+        
+        console.log(`\n🚫 Blacklist Check for "${job.title}":`)
+        console.log(formatBlacklistResult(blacklistCheck))
+        
+        if (blacklistCheck.isBlacklisted) {
+          console.log(`⏭️ Skipping job "${job.title}" - contains blacklisted keywords: ${blacklistCheck.matchedKeywords.join(', ')}`)
+          skippedCount++
+          continue
+        } else {
+          console.log(`✅ No blacklisted keywords found - proceeding with application\n`)
+        }
+      }
+      // ===== END BLACKLIST KEYWORDS CHECK =====
 
       // Process template for this specific job (if using custom template)
       let processedCoverLetter = ''
